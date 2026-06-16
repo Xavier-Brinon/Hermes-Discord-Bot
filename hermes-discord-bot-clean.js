@@ -15,13 +15,13 @@ const HERMES_BIN = '/data/.local/bin/hermes';
 const LINK_PATTERN = /https?:\/\/\S+/i;
 const PROCESSED_MESSAGES = new Set();
 
-// Allowed guild ID (server restriction)
+// Allowed guild ID (server restriction) — REQUIRED
 const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
 if (!ALLOWED_GUILD_ID) {
-  console.warn('⚠️  ALLOWED_GUILD_ID not set — bot will respond on ALL servers. Set it to restrict to one server.');
-} else {
-  console.log(`🔒 Restreint au serveur ID: ${ALLOWED_GUILD_ID}`);
+  console.error('❌ ALLOWED_GUILD_ID is required. Set it in .env to restrict the bot to one server.');
+  process.exit(1);
 }
+console.log(`🔒 Restreint au serveur ID: ${ALLOWED_GUILD_ID}`);
 
 // Send a DM to the admin when a CLI error occurs
 async function notifyAdmin(errorType, details) {
