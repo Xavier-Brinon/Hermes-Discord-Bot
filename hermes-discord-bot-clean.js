@@ -15,10 +15,12 @@ const HERMES_BIN = '/data/.local/bin/hermes';
 const LINK_PATTERN = /https?:\/\/\S+/i;
 const PROCESSED_MESSAGES = new Set();
 
-// Admin user ID for error notifications (from encrypted .env)
-const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
-if (!ADMIN_USER_ID) {
-  console.warn('ADMIN_USER_ID not set — admin DM notifications disabled');
+// Allowed guild ID (server restriction)
+const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
+if (!ALLOWED_GUILD_ID) {
+  console.warn('⚠️  ALLOWED_GUILD_ID not set — bot will respond on ALL servers. Set it to restrict to one server.');
+} else {
+  console.log(`🔒 Restreint au serveur ID: ${ALLOWED_GUILD_ID}`);
 }
 
 // Send a DM to the admin when a CLI error occurs
@@ -288,6 +290,12 @@ client.on('ready', () => {
   console.log(`📢 Prêt à répondre aux mentions @${client.user.username}`);
   console.log(`🇫🇷 Réponses exclusivement en français`);
   console.log(`🔌 Connecté à Hermes CLI: ${HERMES_BIN}`);
+  
+  // Log all guilds the bot is in (for server restriction setup)
+  console.log(`🏠 Serveurs connectés (${client.guilds.cache.size}):`);
+  client.guilds.cache.forEach(guild => {
+    console.log(`   - ${guild.name} (ID: ${guild.id})`);
+  });
 });
 
 client.on('messageCreate', async message => {
@@ -296,6 +304,12 @@ client.on('messageCreate', async message => {
   
   const isMentioned = message.mentions.has(client.user.id);
   const isDirectMessage = message.channel.type === 'DM';
+  
+  // --- Server restriction ---
+  // Only respond on the allowed guild, or in DMs (for admin)
+  if (!isDirectMessage && ALLOWED_GUILD_ID && message.guild.id !== ALLOWED_GUILD_ID) {
+    return; // silently ignore messages from other servers
+  }
   
   // --- @mention or DM: normal question handling ---
   if (isMentioned || isDirectMessage) {
