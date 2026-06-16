@@ -1,0 +1,26 @@
+{
+  "name": "hermes-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot powered by Hermes Agent — French-language assistant",
+  "main": "hermes-discord-bot-clean.js",
+  "scripts": {
+    "start": "npx dotenvx run -f .env -- node hermes-discord-bot-clean.js",
+    "pm2:start": "npx dotenvx run -f .env -- npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",
+    "pm2:stop": "npx pm2 stop hermes-discord-bot",
+    "pm2:restart": "npx pm2 stop hermes-discord-bot 2>/dev/null || true; npx pm2 delete hermes-discord-bot 2>/dev/null || true; npx dotenvx run -f .env -- npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",
+    "pm2:status": "npx pm2 list",
+    "pm2:logs": "npx pm2 logs hermes-discord-bot"
+  },
+  "keywords": ["discord", "bot", "hermes", "ai"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.18.0",
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.3.1",
+    "pm2": "^7.0.1"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.71.3"
+  }
+}

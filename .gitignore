@@ -1,0 +1,23 @@
+# dotenvx — encrypted .env is safe to commit, .env.keys is NOT
+.env.keys
+.env.vault
+.env.previous
+
+# Dependencies
+node_modules/
+
+# Runtime artifacts
+.link_cache.json
+*.log
+
+# PM2
+.pm2/
+dump.pm2
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
