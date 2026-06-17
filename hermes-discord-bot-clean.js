@@ -352,12 +352,22 @@ async function scanChannelForLinks(channel) {
   }
 }
 
-// Fetch channel history for a given time range (in days back from now)
-async function fetchChannelHistory(channel, daysBack = 7) {
+// Fetch channel history for a given time range
+// Accepts either { daysBack } (relative to now) or { since, until } (absolute timestamps in ms)
+async function fetchChannelHistory(channel, opts = {}) {
   try {
-    const since = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+    let since, until;
+    if (opts.since && opts.until) {
+      since = opts.since;
+      until = opts.until;
+    } else {
+      const daysBack = opts.daysBack || 7;
+      since = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+      until = Date.now();
+    }
     const sinceDate = new Date(since).toISOString();
-    console.log(`📜 Fetching history for #${channel.name}, since: ${sinceDate} (${daysBack} days back)`);
+    const untilDate = new Date(until).toISOString();
+    console.log(`📜 Fetching history for #${channel.name}, range: ${sinceDate} → ${untilDate}`);
     const allMessages = [];
     let lastId = null;
     let fetched = 0;
@@ -388,6 +398,10 @@ async function fetchChannelHistory(channel, daysBack = 7) {
           // This message is too old, skip it but keep going through the batch
           continue;
         }
+        if (msg.createdTimestamp > until) {
+          // This message is too new (future batches will cover it), skip
+          continue;
+        }
         allMessages.push({
           author: msg.author.tag,
           content: msg.content.substring(0, 500),
@@ -408,7 +422,7 @@ async function fetchChannelHistory(channel, daysBack = 7) {
       }
     }
 
-    console.log(`📜 Done: ${allMessages.length} messages within ${daysBack}-day window`);
+    console.log(`📜 Done: ${allMessages.length} messages in window`);
     return allMessages.reverse();
   } catch (e) {
     console.error('Failed to fetch channel history:', e.message);
@@ -475,8 +489,9 @@ client.on('messageCreate', async message => {
         console.log('📜 History/recap request detected, fetching channel history...');
         await message.react('👀');
 
-        // Determine how many days back from the question
+        // Determine the timeframe
         let daysBack = 7; // default: 1 week
+        let sinceTs = null, untilTs = null; // absolute timestamps for month-based requests
         const now = new Date();
 
         // French + English month names
@@ -488,19 +503,22 @@ client.on('messageCreate', async message => {
           'july':6,'august':7,'september':8,'october':9,'november':10,'december':11
         };
 
-        // "mois de mai", "mois d'avril", "month of may"
+        // "mois de mai", "mois d'avril", "month of may" → only that month
         const monthMatch = content.match(/mois\s+(d['e]|de\s+)?(\w+)/i);
         if (monthMatch && monthNames[monthMatch[2].toLowerCase()] !== undefined) {
           const m = monthNames[monthMatch[2].toLowerCase()];
           let year = now.getFullYear();
           if (m > now.getMonth()) year--; // future month → last year
-          const monthStart = new Date(year, m, 1);
-          daysBack = Math.floor((now - monthStart) / 86400000);
+          sinceTs = new Date(year, m, 1).getTime();
+          untilTs = new Date(year, m + 1, 0, 23, 59, 59, 999).getTime(); // last day of month
         }
-        // "mois dernier", "last month"
+        // "mois dernier", "last month" → only last month
         else if (/mois\s+dernier|last\s+month/i.test(content)) {
-          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          daysBack = Math.floor((now - lastMonthStart) / 86400000);
+          const lastM = now.getMonth() - 1;
+          const year = lastM < 0 ? now.getFullYear() - 1 : now.getFullYear();
+          const m = lastM < 0 ? 11 : lastM;
+          sinceTs = new Date(year, m, 1).getTime();
+          untilTs = new Date(year, m + 1, 0, 23, 59, 59, 999).getTime();
         }
         // "semaine dernière", "last week"
         else if (/semaine\s+dernière|dernière\s+semaine|last\s+week/i.test(content)) {
@@ -525,11 +543,16 @@ client.on('messageCreate', async message => {
         }
 
         // Fetch messages for the requested timeframe
-        let history = await fetchChannelHistory(message.channel, daysBack);
-        // If too few messages, extend up to 30 days
-        if (history.length < 10 && daysBack < 30) {
-          console.log(`📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`);
-          history = await fetchChannelHistory(message.channel, 30);
+        let history;
+        if (sinceTs && untilTs) {
+          history = await fetchChannelHistory(message.channel, { since: sinceTs, until: untilTs });
+        } else {
+          history = await fetchChannelHistory(message.channel, { daysBack });
+          // If too few messages, extend up to 30 days (only for relative timeframes)
+          if (history.length < 10 && daysBack < 30) {
+            console.log(`📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`);
+            history = await fetchChannelHistory(message.channel, { daysBack: 30 });
+          }
         }
         if (history.length > 200) {
           history = history.slice(-200);
@@ -542,10 +565,13 @@ client.on('messageCreate', async message => {
 
         // Send ALL non-bot messages as context (full content, no analytics)
         const nonBotMessages = history.filter(m => !m.isBot);
-        // Use the requested timeframe start, not the oldest message date
-        const sinceDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const firstDate = sinceDate;
-        const lastDate = history[history.length - 1].timestamp.split('T')[0];
+        // Use the requested timeframe boundaries for the header
+        const firstDate = sinceTs
+          ? new Date(sinceTs).toISOString().split('T')[0]
+          : new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const lastDate = untilTs
+          ? new Date(untilTs).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
 
         let context = `Messages du canal #${message.channel.name} (${firstDate} → ${lastDate}, ${nonBotMessages.length} messages non-bot) :\n\n`;
         for (const m of nonBotMessages) {
