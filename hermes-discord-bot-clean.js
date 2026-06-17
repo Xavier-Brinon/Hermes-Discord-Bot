@@ -15,6 +15,9 @@ const HERMES_BIN = '/data/.local/bin/hermes';
 const LINK_PATTERN = /https?:\/\/\S+/i;
 const PROCESSED_MESSAGES = new Set();
 
+// History/summary request detection (French + English)
+const HISTORY_PATTERN = /\b(résume|récap|récapitul|activité|semaine|derniers?\s*messages|derniers?\s*jours?|quoi\s+de\s+neuf|que\s+s['e]est\s+passé|historique|archive|summarize|recap|summary|activity|past\s+week|recent\s+messages|what\s+happened|catch\s+me\s+up|last\s+week|last\s+few\s+days)\b/i;
+
 // Allowed guild ID (server restriction) — REQUIRED
 const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
 if (!ALLOWED_GUILD_ID) {
@@ -23,12 +26,25 @@ if (!ALLOWED_GUILD_ID) {
 }
 console.log(`🔒 Restreint au serveur ID: ${ALLOWED_GUILD_ID}`);
 
+// Admin user ID for error notifications
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
+if (!ADMIN_USER_ID) {
+  console.warn('⚠️ ADMIN_USER_ID not set — admin error notifications disabled');
+} else {
+  console.log(`👤 Admin notifications enabled for user ID: ${ADMIN_USER_ID}`);
+}
+
 // Send a DM to the admin when a CLI error occurs
 async function notifyAdmin(errorType, details) {
   try {
     const admin = await client.users.fetch(ADMIN_USER_ID);
     if (admin) {
-      await admin.send(`⚠️ **Erreur Hermes CLI** — ${errorType}\n\`\`\`\n${details}\n\`\`\``);
+      // Discord DM limit is 2000 chars — cap details at 1900 to leave room for header
+      let truncated = details;
+      if (truncated.length > 1900) {
+        truncated = truncated.substring(0, 1897) + '...';
+      }
+      await admin.send(`⚠️ **Erreur Hermes CLI** — ${errorType}\n\`\`\`\n${truncated}\n\`\`\``);
     }
   } catch (e) {
     console.error('Failed to notify admin:', e.message);
@@ -119,25 +135,28 @@ const messagesFR = {
 };
 
 // Function to communicate with Hermes via CLI
-function askHermes(question, extraContext, useWebTools) {
+function askHermes(question, extraContext, useWebTools, customTimeout, quiet) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
-    // Always instruct Hermes to respond in French
-    let prompt = `Réponds en français uniquement. Question : ${question}`;
+    // Always instruct Hermes to respond in French, no hard line breaks
+    let prompt = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
     if (extraContext) {
-      prompt = `Contexte : ${extraContext}\n\nRéponds en français uniquement. Question : ${question}`;
+      prompt = `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
     }
     
     const args = ['chat', '-q', prompt];
     if (useWebTools) {
       args.splice(1, 0, '-t', 'web');  // insert -t web before -q
     }
+    if (quiet) {
+      args.push('-Q');  // suppress tool calls, banner, spinner
+    }
     
-    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}`);
+    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${quiet ? ' (quiet)' : ''}`);
     
     execFile(HERMES_BIN, args, {
-      timeout: 60000,
+      timeout: customTimeout || 60000,
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -158,6 +177,7 @@ function askHermes(question, extraContext, useWebTools) {
       console.log(stdout);
       console.log('--- END HERMES OUTPUT ---');
       // Extract final answer: find the text between ⚕ Hermes banner and closing ──
+      // With -Q (quiet mode), there's no banner — use full stdout
       const lines = stdout.split('\n');
       let response = '';
       let inAnswer = false;
@@ -173,8 +193,12 @@ function askHermes(question, extraContext, useWebTools) {
           break;
         }
         if (inAnswer && trimmed && !trimmed.startsWith('┌') && !trimmed.startsWith('│') && !trimmed.startsWith('└')) {
-          response += (response ? ' ' : '') + trimmed;
+          response += (response ? '\n' : '') + trimmed;
         }
+      }
+      // If no banner found (quiet mode), use stdout directly, stripping Query: echo
+      if (!inAnswer) {
+        response = stdout.replace(/^Query:.*?\n\n?/s, '').trim();
       }
       response = response.trim();
       resolve(response || messagesFR.fallbackResponse.replace('{command}', question));
@@ -188,7 +212,7 @@ function summarizeLink(url, context) {
     const startTime = Date.now();
     const prompt = `Résume en français le contenu de ce lien : ${url}.
 Contexte : ${context || 'aucun'}.
-Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questions). Sois concis, évite les sauts de ligne inutiles.`;
+Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questions). Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Sois concis.`;
     
     console.log(`📤 Summarizing link: ${url}`);
     
@@ -228,7 +252,7 @@ Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questio
           break;
         }
         if (inAnswer && trimmed && !trimmed.startsWith('┌') && !trimmed.startsWith('│') && !trimmed.startsWith('└')) {
-          response += (response ? ' ' : '') + trimmed;
+          response += (response ? '\n' : '') + trimmed;
         }
       }
       response = response.trim();
@@ -252,14 +276,56 @@ async function finalizeReaction(message, success) {
   }
 }
 
+// Unwrap terminal-formatted text: merge lines broken mid-sentence
+// Hermes outputs at ~80 chars regardless of prompt instructions
+function unwrapText(text) {
+  if (!text) return text;
+  const lines = text.split('\n');
+  const result = [];
+  let buffer = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      // Empty line = paragraph break
+      if (buffer) { result.push(buffer); buffer = ''; }
+      result.push('');
+      continue;
+    }
+    // Structural markers = new paragraph
+    if (/^(📊|🔥|🔗|🤖|📌|❓|⚠️|##|THEME:|---$|[-\d]+[.)]\s)/.test(trimmed)) {
+      if (buffer) { result.push(buffer); buffer = ''; }
+      // THEME: and --- lines must stay standalone — don't merge summary into them
+      if (/^THEME:/i.test(trimmed) || trimmed === '---') {
+        result.push(trimmed);
+        // buffer stays empty so summary lines start fresh
+      } else {
+        buffer = trimmed;
+      }
+      continue;
+    }
+    // Merge: append to current paragraph
+    if (buffer) {
+      buffer += ' ' + trimmed;
+    } else {
+      buffer = trimmed;
+    }
+  }
+  if (buffer) result.push(buffer);
+
+  return result.join('\n');
+}
+
 // Function to format Hermes response
 function formatHermesResponse(response) {
   if (!response) return messagesFR.fallbackResponse;
-  
+
+  response = unwrapText(response);
+
   if (response.length > HERMES_CONFIG.maxResponseLength) {
     return response.substring(0, HERMES_CONFIG.maxResponseLength - 3) + "...";
   }
-  
+
   return response;
 }
 
@@ -280,6 +346,70 @@ async function scanChannelForLinks(channel) {
     return links;
   } catch (e) {
     console.error('Failed to scan channel for links:', e.message);
+    return [];
+  }
+}
+
+// Fetch channel history for a given time range (in days back from now)
+async function fetchChannelHistory(channel, daysBack = 7) {
+  try {
+    const since = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+    const sinceDate = new Date(since).toISOString();
+    console.log(`📜 Fetching history for #${channel.name}, since: ${sinceDate} (${daysBack} days back)`);
+    const allMessages = [];
+    let lastId = null;
+    let fetched = 0;
+    let stopped = false;
+
+    while (!stopped) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+
+      const batch = await channel.messages.fetch(options);
+      if (batch.size === 0) {
+        console.log(`📜 No more messages returned by API (fetched ${fetched} total)`);
+        break;
+      }
+
+      const firstMsg = batch.first();
+      const lastMsg = batch.last();
+      console.log(`📜 Batch: ${batch.size} msgs, range: ${new Date(lastMsg.createdTimestamp).toISOString()} → ${new Date(firstMsg.createdTimestamp).toISOString()}`);
+
+      // If the NEWEST message in this batch is already older than cutoff, stop
+      if (firstMsg.createdTimestamp < since) {
+        console.log(`📜 Entire batch is older than cutoff, stopping`);
+        break;
+      }
+
+      for (const [, msg] of batch) {
+        if (msg.createdTimestamp < since) {
+          // This message is too old, skip it but keep going through the batch
+          continue;
+        }
+        allMessages.push({
+          author: msg.author.tag,
+          content: msg.content.substring(0, 500),
+          timestamp: msg.createdAt.toISOString(),
+          hasLinks: LINK_PATTERN.test(msg.content),
+          isBot: msg.author.bot
+        });
+      }
+
+      lastId = batch.last().id;
+      fetched += batch.size;
+      console.log(`📜 Collected ${allMessages.length} in-window messages so far (${fetched} total fetched)...`);
+
+      // Safety limit: max 5000 messages fetched
+      if (fetched >= 5000) {
+        console.log(`📜 Hit safety limit of 5000 messages`);
+        break;
+      }
+    }
+
+    console.log(`📜 Done: ${allMessages.length} messages within ${daysBack}-day window`);
+    return allMessages.reverse();
+  } catch (e) {
+    console.error('Failed to fetch channel history:', e.message);
     return [];
   }
 }
@@ -337,7 +467,103 @@ client.on('messageCreate', async message => {
         message.reply(helpMessage);
         return;
       }
-      
+
+      // --- Channel history / recap request ---
+      if (HISTORY_PATTERN.test(content) && !isDirectMessage) {
+        console.log('📜 History/recap request detected, fetching channel history...');
+        await message.react('👀');
+
+        // Determine how many days back from the question
+        let daysBack = 7; // default: 1 week
+        const dayMatch = content.match(/(\d+)\s*(jours?|days?|semaines?|weeks?)/i);
+        if (dayMatch) {
+          const num = parseInt(dayMatch[1]);
+          const unit = dayMatch[2].toLowerCase();
+          if (unit.startsWith('semaine') || unit.startsWith('week')) {
+            daysBack = num * 7;
+          } else {
+            daysBack = num;
+          }
+        }
+
+        // Fetch messages for the requested timeframe
+        let history = await fetchChannelHistory(message.channel, daysBack);
+        // If too few messages, extend up to 30 days
+        if (history.length < 10 && daysBack < 30) {
+          console.log(`📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`);
+          history = await fetchChannelHistory(message.channel, 30);
+        }
+        if (history.length > 200) {
+          history = history.slice(-200);
+        }
+        if (history.length === 0) {
+          await message.reply("📭 Je n'ai trouvé aucun message récent dans ce canal.");
+          await finalizeReaction(message, false);
+          return;
+        }
+
+        // Send ALL non-bot messages as context (full content, no analytics)
+        const nonBotMessages = history.filter(m => !m.isBot);
+        // Use the requested timeframe start, not the oldest message date
+        const sinceDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const firstDate = sinceDate;
+        const lastDate = history[history.length - 1].timestamp.split('T')[0];
+
+        let context = `Messages du canal #${message.channel.name} (${firstDate} → ${lastDate}, ${nonBotMessages.length} messages non-bot) :\n\n`;
+        for (const m of nonBotMessages) {
+          context += `[${m.timestamp.split('T')[0]} | ${m.author}] ${m.content}\n`;
+        }
+
+        const recapPrompt = `Voici tous les messages récents de ce canal. ` +
+          `Identifie les thèmes principaux (3 à 5 max) et liste-les simplement. ` +
+          `⚠️ FORMAT OBLIGATOIRE — réponds EXACTEMENT comme ceci, une ligne par thème :\n\n` +
+          `THEME: Nom du thème 1\nTHEME: Nom du thème 2\nTHEME: Nom du thème 3\n\n` +
+          `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`;
+
+        // Ask Hermes (quiet mode — no web tools needed for recap)
+        const hermesResponse = await askHermes(recapPrompt, context, false, 120000, true);
+        const rawResponse = formatHermesResponse(hermesResponse);
+
+        // Parse themes: extract THEME: lines
+        const themes = [];
+        for (const line of rawResponse.split('\n')) {
+          const t = line.trim();
+          if (t.toUpperCase().startsWith('THEME:')) {
+            const name = t.replace(/^THEME:\s*/i, '').trim();
+            if (name && name.length > 2) {
+              themes.push(name);
+            }
+          }
+        }
+
+        if (themes.length === 0) {
+          await message.reply("🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue.");
+          await finalizeReaction(message, false);
+          return;
+        }
+
+        // Create a thread and post each theme as a separate message
+        console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
+        const thread = await message.startThread({
+          name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
+          autoArchiveDuration: 60
+        });
+        console.log(`📊 Thread created: ${thread.id}`);
+
+        // Header message in thread
+        await thread.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
+
+        // Post each theme
+        for (const theme of themes) {
+          console.log(`📊 Posting theme: ${theme}`);
+          await thread.send(`**${theme}**`);
+        }
+
+        console.log(`📊 Recap complete: ${themes.length} themes posted in thread ${thread.id}`);
+        await finalizeReaction(message, true);
+        return;
+      }
+
       // Add 👀 reaction to signal processing
       await message.react('👀');
       
