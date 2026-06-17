@@ -13,6 +13,8 @@ const HERMES_BIN = '/data/.local/bin/hermes';
 
 // Link detection
 const LINK_PATTERN = /https?:\/\/\S+/i;
+// URLs that are NOT articles — skip silently
+const NON_ARTICLE_PATTERN = /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|reddit\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
 const PROCESSED_MESSAGES = new Set();
 
 // History/summary request detection (French + English)
@@ -115,9 +117,9 @@ const messagesFR = {
   
   processing: "👀",  // emoji reaction instead of text reply
   
-  error: "❌ Désolé, j'ai rencontré une erreur en traitant votre demande.",
+  error: "Désolé, j'ai rencontré une erreur en traitant votre demande.",
   
-  hermesError: "❌ Désolé, je n'ai pas pu obtenir de réponse de l'IA Hermes.\n" +
+  hermesError: "Désolé, je n'ai pas pu obtenir de réponse de l'IA Hermes.\n" +
                 "Veuillez réessayer plus tard ou reformuler votre question.",
   
   helpTitle: "📚 **Aide - Assistant IA Hermes (Français)**",
@@ -624,6 +626,10 @@ client.on('messageCreate', async message => {
   // --- Auto-detect: link without @mention ---
   const links = message.content.match(LINK_PATTERN);
   if (links && links.length > 0) {
+    // Filter: only article-like URLs, skip videos/images/social media silently
+    const articleLinks = links.filter(l => !NON_ARTICLE_PATTERN.test(l));
+    if (articleLinks.length === 0) return; // nothing to summarize, silently skip
+
     PROCESSED_MESSAGES.add(message.id);
     const context = message.content.replace(LINK_PATTERN, '').trim();
     
@@ -632,8 +638,8 @@ client.on('messageCreate', async message => {
       await message.react('👀');
       pendingMsg = await message.reply("🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…");
       
-      // Summarize each link (up to 3)
-      const linksToProcess = links.slice(0, 3);
+      // Summarize each article link (up to 3)
+      const linksToProcess = articleLinks.slice(0, 3);
       const summaries = [];
       for (const link of linksToProcess) {
         const summary = await summarizeLink(link, context);
@@ -652,11 +658,22 @@ client.on('messageCreate', async message => {
     } catch (error) {
       console.error('Link summary error:', error);
       
+      // Silently fail: delete pending message, remove 👀, DM admin only
+      if (pendingMsg) {
+        try { await pendingMsg.delete(); } catch (_) {}
+      }
+      try {
+        const botReactions = message.reactions.cache.filter(r => r.me);
+        for (const [, reaction] of botReactions) {
+          try { await reaction.users.remove(client.user.id); } catch (_) {}
+        }
+      } catch (_) {}
+      
       // Build rich notification for admin
       const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
       const guildName = message.guild ? message.guild.name : 'DM';
       const details = [
-        `URL: ${links[0]}`,
+        `URL: ${articleLinks[0]}`,
         `Auteur: ${message.author.tag}`,
         `Salon: ${channelName} (${guildName})`,
         `Lien message: ${message.url}`,
@@ -665,14 +682,6 @@ client.on('messageCreate', async message => {
         `Erreur: ${error.cliStderr || error.message}`
       ].filter(Boolean).join('\n');
       notifyAdmin('Résumé de lien échoué', details);
-      
-      await finalizeReaction(message, false);
-      
-      if (pendingMsg) {
-        await pendingMsg.edit("❌ Désolé, je n'ai pas pu résumer ce lien.");
-      } else {
-        message.reply("❌ Désolé, je n'ai pas pu résumer ce lien.");
-      }
     }
   }
 });
