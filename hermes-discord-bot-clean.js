@@ -477,14 +477,50 @@ client.on('messageCreate', async message => {
 
         // Determine how many days back from the question
         let daysBack = 7; // default: 1 week
-        const dayMatch = content.match(/(\d+)\s*(jours?|days?|semaines?|weeks?)/i);
-        if (dayMatch) {
-          const num = parseInt(dayMatch[1]);
-          const unit = dayMatch[2].toLowerCase();
-          if (unit.startsWith('semaine') || unit.startsWith('week')) {
-            daysBack = num * 7;
-          } else {
-            daysBack = num;
+        const now = new Date();
+
+        // French + English month names
+        const monthNames = {
+          'janvier':0,'février':0,'fevrier':0,'mars':2,'avril':3,'mai':4,'juin':5,
+          'juillet':6,'aout':7,'août':7,'septembre':8,'octobre':9,'novembre':10,
+          'décembre':11,'decembre':11,
+          'january':0,'february':1,'march':2,'april':3,'may':4,'june':5,
+          'july':6,'august':7,'september':8,'october':9,'november':10,'december':11
+        };
+
+        // "mois de mai", "mois d'avril", "month of may"
+        const monthMatch = content.match(/mois\s+(d['e]|de\s+)?(\w+)/i);
+        if (monthMatch && monthNames[monthMatch[2].toLowerCase()] !== undefined) {
+          const m = monthNames[monthMatch[2].toLowerCase()];
+          let year = now.getFullYear();
+          if (m > now.getMonth()) year--; // future month → last year
+          const monthStart = new Date(year, m, 1);
+          daysBack = Math.ceil((now - monthStart) / 86400000) + 1;
+        }
+        // "mois dernier", "last month"
+        else if (/mois\s+dernier|last\s+month/i.test(content)) {
+          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          daysBack = Math.ceil((now - lastMonthStart) / 86400000) + 1;
+        }
+        // "semaine dernière", "last week"
+        else if (/semaine\s+dernière|dernière\s+semaine|last\s+week/i.test(content)) {
+          daysBack = 7;
+        }
+        // "hier", "yesterday"
+        else if (/\bhier\b|yesterday/i.test(content)) {
+          daysBack = 1;
+        }
+        // "aujourd'hui", "today"
+        else if (/\baujourd['e]hui\b|today/i.test(content)) {
+          daysBack = 1;
+        }
+        // Numeric: "3 jours", "2 semaines", "5 days", "3 weeks"
+        else {
+          const dayMatch = content.match(/(\d+)\s*(jours?|days?|semaines?|weeks?)/i);
+          if (dayMatch) {
+            const num = parseInt(dayMatch[1]);
+            const unit = dayMatch[2].toLowerCase();
+            daysBack = unit.startsWith('semaine') || unit.startsWith('week') ? num * 7 : num;
           }
         }
 
