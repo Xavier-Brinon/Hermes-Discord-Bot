@@ -495,12 +495,12 @@ client.on('messageCreate', async message => {
           let year = now.getFullYear();
           if (m > now.getMonth()) year--; // future month → last year
           const monthStart = new Date(year, m, 1);
-          daysBack = Math.ceil((now - monthStart) / 86400000) + 1;
+          daysBack = Math.floor((now - monthStart) / 86400000);
         }
         // "mois dernier", "last month"
         else if (/mois\s+dernier|last\s+month/i.test(content)) {
           const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          daysBack = Math.ceil((now - lastMonthStart) / 86400000) + 1;
+          daysBack = Math.floor((now - lastMonthStart) / 86400000);
         }
         // "semaine dernière", "last week"
         else if (/semaine\s+dernière|dernière\s+semaine|last\s+week/i.test(content)) {
