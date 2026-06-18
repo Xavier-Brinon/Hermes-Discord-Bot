@@ -87,7 +87,11 @@ const HERMES_CONFIG = {
 const CACHE_FILE = '/data/workspace/.link_cache.json';
 let lastLinkPerChannel = new Map();
 
-// Load persisted cache on startup
+// Per-channel/thread session tracking for conversation continuity
+const SESSION_CACHE_FILE = '/data/workspace/.session_cache.json';
+let lastSessionPerChannel = new Map();  // key: channelId or channelId:threadId
+
+// Load persisted caches on startup
 try {
   const fs = require('fs');
   if (fs.existsSync(CACHE_FILE)) {
@@ -95,8 +99,13 @@ try {
     lastLinkPerChannel = new Map(Object.entries(data));
     console.log(`📦 Loaded link cache: ${lastLinkPerChannel.size} entries`);
   }
+  if (fs.existsSync(SESSION_CACHE_FILE)) {
+    const data = JSON.parse(fs.readFileSync(SESSION_CACHE_FILE, 'utf-8'));
+    lastSessionPerChannel = new Map(Object.entries(data));
+    console.log(`📦 Loaded session cache: ${lastSessionPerChannel.size} entries`);
+  }
 } catch (e) {
-  console.error('Failed to load link cache:', e.message);
+  console.error('Failed to load caches:', e.message);
 }
 
 function saveCache() {
@@ -107,6 +116,30 @@ function saveCache() {
   } catch (e) {
     console.error('Failed to save link cache:', e.message);
   }
+}
+
+function saveSessionCache() {
+  try {
+    const fs = require('fs');
+    const obj = Object.fromEntries(lastSessionPerChannel);
+    fs.writeFileSync(SESSION_CACHE_FILE, JSON.stringify(obj));
+  } catch (e) {
+    console.error('Failed to save session cache:', e.message);
+  }
+}
+
+// Get the session key for a message (channel ID, or channel:thread if in a thread)
+function getSessionKey(message) {
+  if (message.channel.isThread()) {
+    return `${message.channel.parentId}:${message.channel.id}`;
+  }
+  return message.channel.id;
+}
+
+// Extract session_id from Hermes stdout
+function extractSessionId(stdout) {
+  const match = stdout.match(/session_id:\s*(\S+)/);
+  return match ? match[1] : null;
 }
 
 // French messages
@@ -137,7 +170,8 @@ const messagesFR = {
 };
 
 // Function to communicate with Hermes via CLI
-function askHermes(question, extraContext, useWebTools, customTimeout, quiet) {
+// Returns {response, sessionId} — sessionId can be used to resume conversation
+function askHermes(question, extraContext, useWebTools, customTimeout, quiet, sessionId) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -147,15 +181,18 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet) {
       prompt = `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
     }
     
-    const args = ['chat', '-q', prompt];
+    const args = ['-p', 'discord-bot', 'chat', '-q', prompt];
+    if (sessionId) {
+      args.splice(2, 0, '--resume', sessionId);  // insert --resume <id> after -p discord-bot
+    }
     if (useWebTools) {
-      args.splice(1, 0, '-t', 'web');  // insert -t web before -q
+      args.splice(sessionId ? 4 : 2, 0, '-t', 'web');  // insert -t web after chat
     }
     if (quiet) {
       args.push('-Q');  // suppress tool calls, banner, spinner
     }
     
-    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${quiet ? ' (quiet)' : ''}`);
+    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${quiet ? ' (quiet)' : ''}${sessionId ? ' (resume)' : ''}`);
     
     execFile(HERMES_BIN, args, {
       timeout: customTimeout || 60000,
@@ -203,7 +240,11 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet) {
         response = stdout.replace(/^Query:.*?\n\n?/s, '').trim();
       }
       response = response.trim();
-      resolve(response || messagesFR.fallbackResponse.replace('{command}', question));
+      const newSessionId = extractSessionId(stdout);
+      resolve({
+        response: response || messagesFR.fallbackResponse.replace('{command}', question),
+        sessionId: newSessionId
+      });
     });
   });
 }
@@ -218,7 +259,7 @@ Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questio
     
     console.log(`📤 Summarizing link: ${url}`);
     
-    execFile(HERMES_BIN, ['chat', '-q', prompt, '-t', 'web'], {
+    execFile(HERMES_BIN, ['-p', 'discord-bot', 'chat', '-q', prompt, '-t', 'web'], {
       timeout: 60000,
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
@@ -258,6 +299,8 @@ Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questio
         }
       }
       response = response.trim();
+      // Apply unwrapText to merge mid-sentence line breaks (same as formatHermesResponse)
+      response = unwrapText(response);
       resolve(response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`);
     });
   });
@@ -318,17 +361,92 @@ function unwrapText(text) {
   return result.join('\n');
 }
 
-// Function to format Hermes response
+// Function to format Hermes response (unwrap only, no truncation — caller handles splitting)
 function formatHermesResponse(response) {
   if (!response) return messagesFR.fallbackResponse;
+  return unwrapText(response);
+}
 
-  response = unwrapText(response);
+// Split a long response at logical boundaries and send via thread
+// Discord message limit is 2000 chars; we use 1900 to leave margin for formatting
+const DISCORD_MSG_LIMIT = 1900;
 
-  if (response.length > HERMES_CONFIG.maxResponseLength) {
-    return response.substring(0, HERMES_CONFIG.maxResponseLength - 3) + "...";
+function splitAtBoundaries(text, maxLen) {
+  const chunks = [];
+  const paragraphs = text.split('\n');
+  let current = '';
+
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) {
+      // Empty line = paragraph separator — flush current if non-empty
+      if (current) {
+        chunks.push(current.trim());
+        current = '';
+      }
+      continue;
+    }
+
+    const candidate = current ? current + '\n' + trimmed : trimmed;
+
+    if (candidate.length <= maxLen) {
+      current = candidate;
+    } else {
+      // Candidate too long — flush current, start new chunk
+      if (current) {
+        chunks.push(current.trim());
+      }
+      // If this single paragraph exceeds maxLen, hard-split it
+      if (trimmed.length > maxLen) {
+        let remaining = trimmed;
+        while (remaining.length > maxLen) {
+          // Try to split at last sentence boundary (., !, ?, :, ;) within limit
+          let cutAt = maxLen;
+          const lastPunct = remaining.lastIndexOf('.', maxLen);
+          if (lastPunct > maxLen * 0.6) cutAt = lastPunct + 1;
+          else {
+            const lastSpace = remaining.lastIndexOf(' ', maxLen);
+            if (lastSpace > maxLen * 0.6) cutAt = lastSpace;
+          }
+          chunks.push(remaining.substring(0, cutAt).trim());
+          remaining = remaining.substring(cutAt).trim();
+        }
+        current = remaining;
+      } else {
+        current = trimmed;
+      }
+    }
+  }
+  if (current) chunks.push(current.trim());
+  return chunks;
+}
+
+async function sendLongResponse(message, text) {
+  if (text.length <= DISCORD_MSG_LIMIT) {
+    // Fits in one message — simple reply
+    await message.reply(text);
+    return;
   }
 
-  return response;
+  const chunks = splitAtBoundaries(text, DISCORD_MSG_LIMIT);
+
+  // If already in a thread, post chunks directly — no sub-thread
+  if (message.channel.isThread()) {
+    for (const chunk of chunks) {
+      await message.channel.send(chunk);
+    }
+    return;
+  }
+
+  // Create a thread and post chunks
+  const thread = await message.startThread({
+    name: '📄 Réponse détaillée',
+    autoArchiveDuration: 60
+  });
+
+  for (const chunk of chunks) {
+    await thread.send(chunk);
+  }
 }
 
 // Scan recent channel messages for links (fallback when cache is empty)
@@ -585,8 +703,8 @@ client.on('messageCreate', async message => {
           `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`;
 
         // Ask Hermes (quiet mode — no web tools needed for recap)
-        const hermesResponse = await askHermes(recapPrompt, context, false, 120000, true);
-        const rawResponse = formatHermesResponse(hermesResponse);
+        const { response: recapResponse } = await askHermes(recapPrompt, context, false, 120000, true);
+        const rawResponse = formatHermesResponse(recapResponse);
 
         // Parse themes: extract THEME: lines
         const themes = [];
@@ -606,24 +724,25 @@ client.on('messageCreate', async message => {
           return;
         }
 
-        // Create a thread and post each theme as a separate message
-        console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
-        const thread = await message.startThread({
-          name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
-          autoArchiveDuration: 60
-        });
-        console.log(`📊 Thread created: ${thread.id}`);
-
-        // Header message in thread
-        await thread.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
-
-        // Post each theme
-        for (const theme of themes) {
-          console.log(`📊 Posting theme: ${theme}`);
-          await thread.send(`**${theme}**`);
+        // Post themes: if already in a thread, post directly; otherwise create one
+        if (message.channel.isThread()) {
+          console.log(`📊 Already in thread ${message.channel.id}, posting themes directly`);
+          await message.channel.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
+          for (const theme of themes) {
+            await message.channel.send(`**${theme}**`);
+          }
+        } else {
+          console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
+          const thread = await message.startThread({
+            name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
+            autoArchiveDuration: 60
+          });
+          console.log(`📊 Thread created: ${thread.id}`);
+          await thread.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
+          for (const theme of themes) {
+            await thread.send(`**${theme}**`);
+          }
         }
-
-        console.log(`📊 Recap complete: ${themes.length} themes posted in thread ${thread.id}`);
         await finalizeReaction(message, true);
         return;
       }
@@ -651,10 +770,20 @@ client.on('messageCreate', async message => {
         useWeb = true;
       }
       
-      const hermesResponse = await askHermes(content, extraContext, useWeb);
+      // Get session key and resume previous conversation if available
+      const sessionKey = getSessionKey(message);
+      const previousSessionId = lastSessionPerChannel.get(sessionKey);
+      
+      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, extraContext, useWeb, null, false, previousSessionId);
       const formattedResponse = formatHermesResponse(hermesResponse);
       
-      await message.reply(formattedResponse);
+      // Save session ID for next follow-up in this channel/thread
+      if (newSessionId) {
+        lastSessionPerChannel.set(sessionKey, newSessionId);
+        saveSessionCache();
+      }
+      
+      await sendLongResponse(message, formattedResponse);
       await finalizeReaction(message, true);
       
     } catch (error) {
@@ -709,7 +838,14 @@ client.on('messageCreate', async message => {
       }
       
       const response = summaries.join('\n---\n');
-      await pendingMsg.edit(response);
+      
+      // If response is too long, delete pending msg and use thread splitter
+      if (response.length > DISCORD_MSG_LIMIT) {
+        await pendingMsg.delete();
+        await sendLongResponse(message, response);
+      } else {
+        await pendingMsg.edit(response);
+      }
       
       // Cache the last link for follow-up questions in this channel
       lastLinkPerChannel.set(message.channel.id, linksToProcess[0]);
