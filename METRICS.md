@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-06-24T14:32:09Z
-source_count: 1
+timestamp: 2026-06-24T20:46:14Z
+source_count: 2
 ---
 
 # Metrics — @YackShavingSkill
@@ -20,12 +20,13 @@ they do not represent current drift. Canonical definition:
 ## Per-task
 | task_id | tier | Reflex Rate | Scope Adherence |
 |---------|------|-------------|-----------------|
+| prompt-eval-harness | STANDARD | PASS | 100% |
 | watchdog-restart-reset | STANDARD | PASS | 100% |
 
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 1 |
+| Total tasks | 2 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 100.0% |
 
