@@ -1,0 +1,101 @@
+#+title: Ways of working — @YackShavingSkill
+#+options: toc:2 num:nil ^:{}
+#+startup: showall indent
+
+This project follows the =@YackShavingSkill= framework. The enforceable master
+rules live in [[file:CLAUDE.md][CLAUDE.md]] and the machinery in the vendored =skills/=, =schemas/=,
+=templates/=, =examples/=, and =tools/= directories. This document is the
+explanatory companion: the framework's /process vocabulary/, used identically
+across every project that adopts it. This project's own /domain/ language is
+separate, in [[file:CONTEXT.md][CONTEXT.md]] (the =grill-with-docs= glossary).
+
+This file is emitted verbatim at bootstrap and is identical for every consumer,
+so edit it only if the framework's process vocabulary itself changes.
+Project-specific choices — toolchain, forge, review-viewer, ADRs — do not belong
+here; they live in this project's own =Docs/adr/= and skills.
+
+* Core framework concepts
+| Term                  | Definition                                                                                                          |
+|-----------------------+---------------------------------------------------------------------------------------------------------------------|
+| *Induced Complexity*  | The tendency of LLM coding agents to over-engineer, add unnecessary abstractions, or expand scope beyond the request. The phenomenon the framework counteracts. |
+| *Agent Counterweight* | The role of the framework — architectural guardrails that restrain LLM tendencies toward over-engineering.         |
+| *Artifact*            | A concrete, structured output produced by a skill (checklists, reports, matrices, journal entries) rather than abstract guidance. Skills produce artifacts; review gates consume them. |
+| *Gold Standard*       | Ideal code patterns in =examples/patterns/=; concrete examples agents reference and mimic for style consistency.    |
+| *Anti-Pattern*        | Negative-reference examples in =examples/anti-patterns/= demonstrating what to avoid.                               |
+
+* Skill modules
+Four composable modules, each producing one artifact.
+
+| Skill                       | Produces              | Key terms                                                                       |
+|-----------------------------+-----------------------+---------------------------------------------------------------------------------|
+| *A — Think Before Coding*   | Pre-Computation Block | Assumptions List, Confidence Score (HIGH/MEDIUM/LOW), Scope Declaration, Alternatives Considered |
+| *B — Simplicity First*      | Simplicity Review     | Line-Count Budget, Simplify Trigger, Abstinence List, Intentional Exclusions     |
+| *C — Surgical Changes*      | Change Boundary       | File Touch List, Out-of-Bound List, Orthogonal Issues, Orphan Tracking, Scope Bleed |
+| *D — Goal-Driven Execution* | Verification Matrix   | Subtask, Pass/Fail Criteria, Self-Loop, Escalation Trigger                       |
+
+* Orchestration and complexity
+| Term                             | Definition                                                                                                       |
+|----------------------------------+------------------------------------------------------------------------------------------------------------------|
+| *Complexity Orchestrator*        | The decision layer that computes a task's Complexity Score and activates the appropriate skill subset. A mechanical rubric, not a model call. |
+| *Complexity Score*               | The raw sum of four 0/1/2 dimensions, range *0–8*.                                                               |
+| *Dimensions*                     | Scope Size (1 file=0, 2–3=1, >3=2); Ambiguity (low/med/high); Risk Surface (internal/public-API/critical-path); Knowledge Gap (none/partial/unknown). |
+| *Tiers*                          | TRIVIAL (0–2): Skill D only. STANDARD (3–5): A+B+C+D + Session Journal + Gold Standard. COMPLEX (6–8): all + Expert Reviewer + explicit user confirmation. |
+| *Plan / Worker / Reviewer Agent* | Plan computes the score and selects skills; Worker (Executor) writes code; Reviewer validates adherence without writing code (the Expert Reviewer at COMPLEX). |
+
+* Reflection artifacts
+| Term                | Definition                                                                                                       |
+|---------------------+------------------------------------------------------------------------------------------------------------------|
+| *Session Journal*   | A structured log (=SESSION_LOG.md=) recording the agent's thinking before and after coding.                      |
+| *Pre-Flight Entry*  | Written BEFORE coding: Simplicity Strategy (MINIMAL/STANDARD/DEEP), Scope Boundaries (in/out), Contextual Retrieval (the Gold Standard read), Assumptions, Trade-off Record. |
+| *Post-Flight Entry* | Written AFTER coding: Reflex Audit (PASSED/FAILED vs the Pre-Flight goal), Violation Checklist (Complexity Creep, Scope Bleed, Style Drift), Verification Results. |
+
+* Verification and review
+| Term                | Definition                                                                                                       |
+|---------------------+------------------------------------------------------------------------------------------------------------------|
+| *Verification Gate* | The post-hoc check before commit: diffs actual changes against declared boundaries and reports violations. "Trust but verify." |
+| *Violation*         | Any deviation between what the agent declared (in its artifacts) and what it did. Counted against a threshold to decide auto-accept / flag / escalate. |
+| *Adherence Report*  | A summary at task completion: which skills fired, what artifacts were produced, how many violations.              |
+| *Scope Adherence*   | Percentage of changed files pre-declared in the Change Boundary's File Touch List (target 100%, file granularity). Formula: =100 - (scope_bleed_count × 100 / actual_count)=. |
+| *Tombstone*         | A historical violation in a frozen =adherence_report.md= since corrected in code. Persists in =METRICS.md= rollups as historical fact; active drift = rollup count − tombstone count. |
+| *Review Gate*       | The entry to the Review phase: the Reviewer reads the Session Journal first, then the code.                       |
+| *Instant Fail*      | A direct contradiction between Pre-Flight commitments and Post-Flight output (e.g. committed to 20 lines, produced 200) — fails immediately. |
+
+* Conventions
+1. *Artifacts are primary* — every skill must produce a concrete artifact.
+2. *Journal precedes code* — the Pre-Flight entry is a gate; no edits before it.
+3. *Reviewer reads Journal first* — review order is Journal → Code; inconsistencies are violations.
+4. *Violations are reported, not blocked* — agents continue after a violation report unless the threshold is exceeded.
+5. *Complexity drives activation* — not all skills fire on all tasks.
+6. *Examples beat descriptions* — agents reference =examples/patterns/= over textual style guidance.
+
+Preferred terms: Complexity Orchestrator (not Orchestrator), Session Journal (not
+Journal), Scope Adherence (not Surgical Purity / Diff Purity), Gold Standard (not
+Example Pattern).
+
+* Issue tracking and lifecycle
+Work is sliced into /issues/ on this project's forge and grabbed one at a time.
+The framework fixes the /shape/ of that slicing, not the forge — the conventions
+here are tracker-neutral. The forge's own specifics (its CLI, label semantics,
+the triage-attribute creation gate) live in this project's forge skill, not here.
+
+What becomes an issue:
+- Parent spec :: one umbrella issue holds the PRD / governing spec for a body of
+  work — the durable reference everything else points back to.
+- Tracer-bullet slices :: the parent is cut into /vertical slices/, each a thin
+  end-to-end increment that ships and is independently grabbable — never a
+  horizontal layer. A phase's /waves/ are these slices, one issue per wave.
+- Just-in-time slices, tracked backlog :: a wave issue is opened only when its
+  slice is ready to work; parent-level deferred work is filed up front as a
+  backlog issue so the whole roadmap stays visible.
+
+Two rules bind every state change, and the Review Gate enforces the first (the
+Verification Matrix carries an /Issue lifecycle documented/ row and the
+Post-Flight Violation Checklist an /Issue Lifecycle/ item — both must be PASS to
+ship):
+1. *Comment precedes transition* — a state change is preceded, in the same step,
+   by a comment recording the reason and current state: the commit / HEAD SHA,
+   how it was reviewed and merged, test outcomes, remaining debt, and the
+   close-reference line. The comment is the audit trail that survives when
+   branches and patches are gone.
+2. *Close with the right reason* — /solved/ means done / merged / resolved; plain
+   /closed/ means won't-do / invalid / superseded. Downstream filters differ.
