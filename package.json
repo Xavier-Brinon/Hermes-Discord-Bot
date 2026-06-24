@@ -5,6 +5,8 @@
   "main": "hermes-discord-bot-clean.js",
   "scripts": {
     "start": "npx dotenvx run -f .env -- node hermes-discord-bot-clean.js",
+    "test": "node --test test/*.test.js",
+    "eval:recap": "node evals/run-recap-eval.js",
     "pm2:start": "npx dotenvx run -f .env -- npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",
     "pm2:stop": "npx pm2 stop hermes-discord-bot",
     "pm2:restart": "npx pm2 stop hermes-discord-bot 2>/dev/null || true; npx pm2 delete hermes-discord-bot 2>/dev/null || true; npx dotenvx run -f .env -- npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",

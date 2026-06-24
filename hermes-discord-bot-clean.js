@@ -7,6 +7,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { execFile } = require('child_process');
 const path = require('path');
+const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes } = require('./prompts');
 
 // Hermes CLI path
 const HERMES_BIN = '/data/.local/bin/hermes';
@@ -175,11 +176,8 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet, se
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
-    // Always instruct Hermes to respond in French, no hard line breaks
-    let prompt = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
-    if (extraContext) {
-      prompt = `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
-    }
+    // Always instruct Hermes to respond in French, no hard line breaks (see prompts.js)
+    const prompt = buildAskPrompt(question, extraContext);
     
     const args = ['-p', 'discord-bot', 'chat', '-q', prompt];
     if (sessionId) {
@@ -253,9 +251,7 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet, se
 function summarizeLink(url, context) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    const prompt = `Résume en français le contenu de ce lien : ${url}.
-Contexte : ${context || 'aucun'}.
-Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questions). Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Sois concis.`;
+    const prompt = buildLinkPrompt(url, context);
     
     console.log(`📤 Summarizing link: ${url}`);
     
@@ -696,27 +692,14 @@ client.on('messageCreate', async message => {
           context += `[${m.timestamp.split('T')[0]} | ${m.author}] ${m.content}\n`;
         }
 
-        const recapPrompt = `Voici tous les messages récents de ce canal. ` +
-          `Identifie les thèmes principaux (3 à 5 max) et liste-les simplement. ` +
-          `⚠️ FORMAT OBLIGATOIRE — réponds EXACTEMENT comme ceci, une ligne par thème :\n\n` +
-          `THEME: Nom du thème 1\nTHEME: Nom du thème 2\nTHEME: Nom du thème 3\n\n` +
-          `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`;
+        const recapPrompt = buildRecapPrompt();
 
         // Ask Hermes (quiet mode — no web tools needed for recap)
         const { response: recapResponse } = await askHermes(recapPrompt, context, false, 120000, true);
         const rawResponse = formatHermesResponse(recapResponse);
 
-        // Parse themes: extract THEME: lines
-        const themes = [];
-        for (const line of rawResponse.split('\n')) {
-          const t = line.trim();
-          if (t.toUpperCase().startsWith('THEME:')) {
-            const name = t.replace(/^THEME:\s*/i, '').trim();
-            if (name && name.length > 2) {
-              themes.push(name);
-            }
-          }
-        }
+        // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
+        const themes = extractThemes(rawResponse);
 
         if (themes.length === 0) {
           await message.reply("🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue.");
