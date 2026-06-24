@@ -28,6 +28,7 @@ check_hermes() {
 while true; do
     if check_hermes; then
         log "Hermes is running normally"
+        RESTART_COUNT=0  # healthy cycle — clear the consecutive-failure count so MAX_RESTARTS means "in a row"
     else
         log "Hermes not running - attempting to restart"
         RESTART_COUNT=$((RESTART_COUNT + 1))
