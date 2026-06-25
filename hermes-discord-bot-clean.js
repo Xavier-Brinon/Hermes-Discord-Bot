@@ -546,7 +546,7 @@ async function fetchChannelHistory(channel, opts = {}) {
 }
 
 // Bot events
-client.on('ready', () => {
+client.on('clientReady', () => {
   console.log(`✅ Bot Discord Hermes connecté en tant que ${client.user.tag}!`);
   console.log(`📢 Prêt à répondre aux mentions @${client.user.username}`);
   console.log(`🇫🇷 Réponses exclusivement en français`);
