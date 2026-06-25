@@ -78,11 +78,12 @@ const client = new Client({
 // Get the token from environment
 const token = getDecryptedToken();
 
-// Hermes configuration
-const HERMES_CONFIG = {
-  timeout: 90000,   // 90s for normal questions
-  maxResponseLength: 2000
-};
+// Hermes CLI timeouts (ms). Web-search calls (-t web) are inherently slower than
+// plain Q&A — they search and fetch — so they get more headroom. The message-length
+// limit lives in DISCORD_MSG_LIMIT (single source of truth), not here.
+const TIMEOUT_NORMAL = 90000;   // 90s — plain @mention/DM questions
+const TIMEOUT_WEB    = 150000;  // 150s — questions using -t web (search + fetch)
+const TIMEOUT_RECAP  = 120000;  // 120s — channel recap summarisation
 
 // Per-channel cache: last summarized link URL (persisted to disk)
 const CACHE_FILE = '/data/workspace/.link_cache.json';
@@ -193,7 +194,7 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet, se
     console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${quiet ? ' (quiet)' : ''}${sessionId ? ' (resume)' : ''}`);
     
     execFile(HERMES_BIN, args, {
-      timeout: customTimeout || 60000,
+      timeout: customTimeout || (useWebTools ? TIMEOUT_WEB : TIMEOUT_NORMAL),
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -256,7 +257,7 @@ function summarizeLink(url, context) {
     console.log(`📤 Summarizing link: ${url}`);
     
     execFile(HERMES_BIN, ['-p', 'discord-bot', 'chat', '-q', prompt, '-t', 'web'], {
-      timeout: 60000,
+      timeout: TIMEOUT_WEB,
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -695,7 +696,7 @@ client.on('messageCreate', async message => {
         const recapPrompt = buildRecapPrompt();
 
         // Ask Hermes (quiet mode — no web tools needed for recap)
-        const { response: recapResponse } = await askHermes(recapPrompt, context, false, 120000, true);
+        const { response: recapResponse } = await askHermes(recapPrompt, context, false, TIMEOUT_RECAP, true);
         const rawResponse = formatHermesResponse(recapResponse);
 
         // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
