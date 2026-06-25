@@ -46,6 +46,55 @@ npm run pm2:status
 npm run pm2:logs
 ```
 
+## Redéploiement (mise à jour du code)
+
+⚠️ `restart` **ne met pas le code à jour** — il relance PM2 sur le fichier déjà
+présent sur le disque. Un correctif fusionné dans `main` ne devient actif sur le
+VPS qu'après ce redéploiement. (Correctif fusionné ≠ correctif en production.)
+
+Le code arrive sur le VPS par `git pull` depuis le miroir GitHub (`origin`).
+Procédure complète, à exécuter **sur le VPS** :
+
+```bash
+cd /data/workspace
+
+# 1. Récupérer le nouveau code
+git pull origin main
+
+# 2. (Seulement si package.json / package-lock.json ont changé) réinstaller
+npm install
+
+# 3. Relancer PM2 pour qu'il relise le fichier
+./manage_hermes.sh restart
+
+# 4. Vérifier le déploiement
+./manage_hermes.sh status     # doit afficher « online »
+git log -1 --oneline          # doit afficher le commit attendu
+./manage_hermes.sh logs       # surveiller le démarrage (Ctrl-C pour quitter)
+```
+
+Enfin, **test de réactivité** : mentionner @Le Mistral Bot dans Discord et
+confirmer une réponse en français.
+
+### Points de vigilance
+
+- **Secrets** : toujours passer par `manage_hermes.sh` (qui enveloppe
+  `npx dotenvx run`). `.env.keys` doit être présent sur le VPS, sinon le
+  déchiffrement échoue au démarrage.
+- **Watchdog** : après un crash en boucle, le watchdog abandonne au bout de 5
+  redémarrages consécutifs. Surveiller les logs juste après un redéploiement.
+- **Sens unique** : le VPS *tire* le code (`git pull`) ; on ne pousse jamais
+  vers `/data/workspace`. La source canonique reste Radicle + `origin`.
+
+### Retour arrière (rollback)
+
+```bash
+cd /data/workspace
+git log --oneline -5          # repérer le commit précédent
+git reset --hard <sha>        # revenir au commit stable
+./manage_hermes.sh restart
+```
+
 ## Après un reboot
 
 ```bash
