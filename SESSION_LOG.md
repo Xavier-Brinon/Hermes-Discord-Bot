@@ -179,3 +179,60 @@ preserved.
 All seven matrix subtasks PASS via static grep + `node --check` (exit 0). End-to-end
 confirmation that a real `-t web` question now survives past 62s needs the live hermes
 profile on the VPS (`/data/.local/bin/hermes`); deferred to deploy rather than asserted.
+
+---
+
+# Task: processed-messages-bound
+complexity_score: 3
+complexity_tier: STANDARD
+
+Issue: 2f4e52a — PROCESSED_MESSAGES Set grows unbounded — memory leak in long-lived process.
+
+## Pre-Flight Entry
+
+### Reflex Check
+- Simplicity Goal: I will use a fixed-capacity FIFO over the existing insertion-ordered
+  `Set` (one `MAX_PROCESSED_MESSAGES` constant + one `rememberMessage()` helper). I will
+  NOT use a TTL map, timers, a true LRU, an env-configurable cap, or a third-party cache.
+- Scope Boundaries:
+  - In-scope: `hermes-discord-bot-clean.js` (declaration + two `.add()` call sites)
+  - Out-of-scope: the `:564` `.has()` guard (read path is correct), `prompts.js`,
+    `README.md`, `CLAUDE.md`, the Hermes banner parser, and sibling issues df0d693/1ff433a
+
+### Simplicity Strategy
+`MINIMAL`
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (change only what the bug
+  names — bound the write path, leave the guard untouched)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (reviving a cache library or
+  wrapper class for ~7 lines of logic)
+
+### Assumptions
+`.artifacts/processed-messages-bound/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+`PASSED`
+
+Rationale: the Simplicity Goal held exactly. The fix is one named cap and a four-line
+`rememberMessage()` helper doing FIFO eviction over the insertion-ordered `Set`; the two
+`.add()` call sites now route through it and the `:564` `.has()` guard is byte-unchanged.
+Nothing on the Abstinence List was added — no TTL map, no timer, no env knob, no LRU
+re-ordering, no cache library, no wrapper class. Diff is 7 logical LOC in one file,
+Actual 7 vs Target 8 (delta -1, under budget). Runtime harness confirms the set caps at
+1000, evicts oldest-first, and still suppresses an in-window duplicate.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — none. A size cap + FIFO delete; no abstraction beyond a free function.
+- [ ] **Scope Bleed** — none. Only `hermes-discord-bot-clean.js` changed for code; artifacts + journal + METRICS are all declared in the Change Boundary File Touch List.
+- [ ] **Style Drift** — none. Matches `examples/patterns/surgical-diff.md` — bounded the write path the issue names, left the guard alone.
+- [x] **Issue Lifecycle** — performed at merge: a `rad issue comment` recording patch ID + HEAD SHA, review/merge method, and build/test outcome precedes `rad issue state --solved 2f4e52a`. Box checked once that comment + transition lands.
+
+### Verification Results
+`.artifacts/processed-messages-bound/verification_matrix.md`
+
+Six of seven matrix subtasks PASS now via `node --check` (exit 0), grep counts (0 raw
+adds / 2 helper calls), an unchanged guard line, and a runtime harness (size==1000,
+oldest evicted, in-window dedup holds). The seventh (issue lifecycle) lands at merge.

@@ -17,6 +17,17 @@ const LINK_PATTERN = /https?:\/\/\S+/i;
 // URLs that are NOT articles — skip silently
 const NON_ARTICLE_PATTERN = /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|reddit\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
 const PROCESSED_MESSAGES = new Set();
+// Bound the dedup set so a long-lived process can't leak memory. Discord only
+// fires duplicate messageCreate events back-to-back, so a rolling window of
+// recent ids is enough. A Set keeps insertion order, so the first value is the
+// oldest — evict it once we exceed the cap (FIFO).
+const MAX_PROCESSED_MESSAGES = 1000;
+function rememberMessage(id) {
+  PROCESSED_MESSAGES.add(id);
+  if (PROCESSED_MESSAGES.size > MAX_PROCESSED_MESSAGES) {
+    PROCESSED_MESSAGES.delete(PROCESSED_MESSAGES.values().next().value);
+  }
+}
 
 // History/summary request detection (French + English)
 const HISTORY_PATTERN = /\b(résume|récap|récapitul|activité|semaine|derniers?\s*messages|derniers?\s*jours?|quoi\s+de\s+neuf|que\s+s['e]est\s+passé|historique|archive|summarize|recap|summary|activity|past\s+week|recent\s+messages|what\s+happened|catch\s+me\s+up|last\s+week|last\s+few\s+days)\b/i;
@@ -574,7 +585,7 @@ client.on('messageCreate', async message => {
   
   // --- @mention or DM: normal question handling ---
   if (isMentioned || isDirectMessage) {
-    PROCESSED_MESSAGES.add(message.id);
+    rememberMessage(message.id);
     let content = message.content;
     
     message.mentions.users.forEach(user => {
@@ -805,7 +816,7 @@ client.on('messageCreate', async message => {
     const articleLinks = links.filter(l => !NON_ARTICLE_PATTERN.test(l));
     if (articleLinks.length === 0) return; // nothing to summarize, silently skip
 
-    PROCESSED_MESSAGES.add(message.id);
+    rememberMessage(message.id);
     const context = message.content.replace(LINK_PATTERN, '').trim();
     
     let pendingMsg;
