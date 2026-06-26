@@ -16,6 +16,9 @@
   "keywords": ["discord", "bot", "hermes", "ai"],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.71.3",
     "axios": "^1.18.0",
