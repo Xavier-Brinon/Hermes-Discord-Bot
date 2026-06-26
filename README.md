@@ -1,42 +1,42 @@
 # Hermes Discord Bot — Le Mistral Bot
 
-Bot Discord francophone propulsé par Hermes Agent. Répond aux @mentions en français dans le canal configuré.
+French-language Discord bot powered by Hermes Agent. Answers @mentions in French in the configured channel.
 
-## État actuel
+## Current status
 
-- **Nom du bot** : Le Mistral Bot#9470
-- **Statut** : ✅ En ligne (PM2)
-- **Framework** : Node.js + discord.js v14
-- **Sécurité** : Token chiffré via dotenvx
+- **Bot name**: Le Mistral Bot#9470
+- **Status**: ✅ Online (PM2)
+- **Framework**: Node.js + discord.js v14
+- **Security**: Token encrypted via dotenvx
 
-## Structure du projet
+## Project structure
 
 ```
 /data/workspace/
-├── hermes-discord-bot-clean.js   # Code principal du bot
-├── manage_hermes.sh              # Script canonique de gestion (start/stop/restart/status/logs)
-├── hermes_watchdog.sh            # Surveillance automatique (vérifie PM2 toutes les 60s)
-├── start_after_reboot.sh         # Démarrage post-reboot
-├── test-token.js                 # Utilitaire de test de token Discord
-├── package.json                  # Configuration npm
-├── .env                          # Variables chiffrées (dotenvx)
-├── .env.keys                     # Clés de déchiffrement (⚠️ ne pas commit)
-└── node_modules/                 # Dépendances
+├── hermes-discord-bot-clean.js   # Main bot code
+├── manage_hermes.sh              # Canonical management script (start/stop/restart/status/logs)
+├── hermes_watchdog.sh            # Automatic supervision (checks PM2 every 60s)
+├── start_after_reboot.sh         # Post-reboot startup
+├── test-token.js                 # Discord token test utility
+├── package.json                  # npm configuration
+├── .env                          # Encrypted variables (dotenvx)
+├── .env.keys                     # Decryption keys (⚠️ do not commit)
+└── node_modules/                 # Dependencies
 ```
 
-## Gestion du bot
+## Managing the bot
 
-Toutes les opérations passent par `manage_hermes.sh` :
+All operations go through `manage_hermes.sh`:
 
 ```bash
-./manage_hermes.sh start      # Démarrer le bot
-./manage_hermes.sh stop       # Arrêter le bot
-./manage_hermes.sh restart    # Redémarrer le bot
-./manage_hermes.sh status     # Voir l'état
-./manage_hermes.sh logs       # Voir les logs
+./manage_hermes.sh start      # Start the bot
+./manage_hermes.sh stop       # Stop the bot
+./manage_hermes.sh restart    # Restart the bot
+./manage_hermes.sh status     # Show status
+./manage_hermes.sh logs       # Show logs
 ```
 
-Équivalents npm :
+npm equivalents:
 
 ```bash
 npm run pm2:start
@@ -46,89 +46,89 @@ npm run pm2:status
 npm run pm2:logs
 ```
 
-## Redéploiement (mise à jour du code)
+## Redeployment (updating the code)
 
-⚠️ `restart` **ne met pas le code à jour** — il relance PM2 sur le fichier déjà
-présent sur le disque. Un correctif fusionné dans `main` ne devient actif sur le
-VPS qu'après ce redéploiement. (Correctif fusionné ≠ correctif en production.)
+⚠️ `restart` **does not update the code** — it relaunches PM2 on the file already
+present on disk. A fix merged into `main` only becomes active on the VPS after
+this redeployment. (Merged fix ≠ fix in production.)
 
-Le code arrive sur le VPS par `git pull` depuis le miroir GitHub (`origin`).
-Procédure complète, à exécuter **sur le VPS** :
+The code reaches the VPS via `git pull` from the GitHub mirror (`origin`).
+Full procedure, to run **on the VPS**:
 
 ```bash
 cd /data/workspace
 
-# 1. Récupérer le nouveau code
+# 1. Fetch the new code
 git pull origin main
 
-# 2. (Seulement si package.json / package-lock.json ont changé) réinstaller
+# 2. (Only if package.json / package-lock.json changed) reinstall
 npm install
 
-# 3. Relancer PM2 pour qu'il relise le fichier
+# 3. Relaunch PM2 so it re-reads the file
 ./manage_hermes.sh restart
 
-# 4. Vérifier le déploiement
-./manage_hermes.sh status     # doit afficher « online »
-git log -1 --oneline          # doit afficher le commit attendu
-./manage_hermes.sh logs       # surveiller le démarrage (Ctrl-C pour quitter)
+# 4. Verify the deployment
+./manage_hermes.sh status     # should show "online"
+git log -1 --oneline          # should show the expected commit
+./manage_hermes.sh logs       # watch startup (Ctrl-C to exit)
 ```
 
-Enfin, **test de réactivité** : mentionner @Le Mistral Bot dans Discord et
-confirmer une réponse en français.
+Finally, a **responsiveness test**: mention @Le Mistral Bot in Discord and
+confirm a reply in French.
 
-### Points de vigilance
+### Watch points
 
-- **Secrets** : toujours passer par `manage_hermes.sh` (qui enveloppe
-  `npx dotenvx run`). `.env.keys` doit être présent sur le VPS, sinon le
-  déchiffrement échoue au démarrage.
-- **Watchdog** : après un crash en boucle, le watchdog abandonne au bout de 5
-  redémarrages consécutifs. Surveiller les logs juste après un redéploiement.
-- **Sens unique** : le VPS *tire* le code (`git pull`) ; on ne pousse jamais
-  vers `/data/workspace`. La source canonique reste Radicle + `origin`.
+- **Secrets**: always go through `manage_hermes.sh` (which wraps
+  `npx dotenvx run`). `.env.keys` must be present on the VPS, otherwise
+  decryption fails at startup.
+- **Watchdog**: after a crash loop, the watchdog gives up after 5 consecutive
+  restarts. Watch the logs right after a redeployment.
+- **One-way street**: the VPS *pulls* the code (`git pull`); we never push to
+  `/data/workspace`. The canonical source stays Radicle + `origin`.
 
-### Retour arrière (rollback)
+### Rollback
 
 ```bash
 cd /data/workspace
-git log --oneline -5          # repérer le commit précédent
-git reset --hard <sha>        # revenir au commit stable
+git log --oneline -5          # find the previous commit
+git reset --hard <sha>        # go back to the stable commit
 ./manage_hermes.sh restart
 ```
 
-## Après un reboot
+## After a reboot
 
 ```bash
 /data/workspace/start_after_reboot.sh
 ```
 
-Ce script lance le watchdog (surveillance automatique) puis démarre le bot.
+This script launches the watchdog (automatic supervision) then starts the bot.
 
-## Récupération automatique
+## Automatic recovery
 
-Le watchdog (`hermes_watchdog.sh`) :
-- Vérifie l'état du bot via `pm2 list` toutes les 60 secondes
-- Redémarre automatiquement en cas de crash
-- Abandonne après 5 redémarrages consécutifs (intervention manuelle requise)
-- Logs dans `/data/workspace/hermes_watchdog.log`
+The watchdog (`hermes_watchdog.sh`):
+- Checks the bot's state via `pm2 list` every 60 seconds
+- Restarts automatically on a crash
+- Gives up after 5 consecutive restarts (manual intervention required)
+- Logs to `/data/workspace/hermes_watchdog.log`
 
-## Sécurité
+## Security
 
-- Le token Discord est **chiffré** dans `.env` via dotenvx
-- Le bot est lancé avec `npx dotenvx run` qui déchiffre les variables au runtime
-- **Ne jamais** commit `.env.keys` ou exposer le token en clair
-- Pour ajouter/modifier une variable chiffrée : `npx dotenvx set NOM_VARIABLE "valeur"`
+- The Discord token is **encrypted** in `.env` via dotenvx
+- The bot is launched with `npx dotenvx run`, which decrypts the variables at runtime
+- **Never** commit `.env.keys` or expose the token in cleartext
+- To add/change an encrypted variable: `npx dotenvx set NAME "value"`
 
-## Dépannage
+## Troubleshooting
 
-| Problème | Vérification |
+| Problem | Check |
 |---|---|
-| Bot ne répond pas | `./manage_hermes.sh status` |
-| Erreur de token | `npx dotenvx get DISCORD_BOT_TOKEN` |
-| Watchdog muet | `tail -f /data/workspace/hermes_watchdog.log` |
-| PM2 corrompu | `npx pm2 kill && ./manage_hermes.sh start` |
+| Bot does not respond | `./manage_hermes.sh status` |
+| Token error | `npx dotenvx get DISCORD_BOT_TOKEN` |
+| Watchdog silent | `tail -f /data/workspace/hermes_watchdog.log` |
+| PM2 corrupted | `npx pm2 kill && ./manage_hermes.sh start` |
 
 ## Maintenance
 
-- **Logs** : `./manage_hermes.sh logs` ou `tail -f /data/workspace/hermes_watchdog.log`
-- **Màj dépendances** : `npm update`
-- **Test de réactivité** : Mentionner @Le Mistral Bot dans Discord
+- **Logs**: `./manage_hermes.sh logs` or `tail -f /data/workspace/hermes_watchdog.log`
+- **Update dependencies**: `npm update`
+- **Responsiveness test**: Mention @Le Mistral Bot in Discord

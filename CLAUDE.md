@@ -37,7 +37,8 @@ launch. See `README.md` for the operational runbook.
 
 ## Conventions
 
-- **All user-facing text is in French.** Keep it that way.
+- **All Discord-facing bot text is in French** (replies, link summaries,
+  recaps). Keep it that way. This governs the bot's output, not developer docs.
 - **Use `execFile`, never `exec`,** for the Hermes CLI — no shell means no command
   injection from user prompts.
 - **Secrets only via dotenvx.** Never commit `.env.keys`. Add/rotate vars with
