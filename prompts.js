@@ -71,7 +71,11 @@ function parseHermesOutput(stdout, stderr) {
     if (t === '' || (t.charCodeAt(0) === 0x26A0 && t.charCodeAt(1) !== 0xFE0F)) { i++; continue; }
     break;
   }
-  const response = lines.slice(i).join('\n').trim();
+  let response = lines.slice(i).join('\n').trim();
+  // Hermes 0.17.0's agent-clarification can leak a status prefix on
+  // non-interactive (-q) calls, e.g. "(clarify timed out after 120s — agent will
+  // decide)". Strip a leading occurrence — its own line or inline (issue 0922f81).
+  response = response.replace(/^\(clarify\b[^)]*\bdecide\)\s*/i, '');
   // -Q emits `session_id:` on stderr; search stderr first, fall back to stdout.
   const idMatch = `${stderr || ''}\n${stdout || ''}`.match(/session_id:\s*(\S+)/);
   return { response, sessionId: idMatch ? idMatch[1] : null };

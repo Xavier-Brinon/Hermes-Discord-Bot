@@ -94,3 +94,20 @@ test('parseHermesOutput — warning-only stdout yields empty response (fallback 
 test('parseHermesOutput — no session id anywhere yields null', () => {
   assert.equal(parseHermesOutput('juste une réponse', '').sessionId, null);
 });
+
+// clarify-status leak: Hermes 0.17.0 non-interactive agent-clarification (issue 0922f81)
+
+test('parseHermesOutput — strips a leaked clarify status prefix (inline, real capture)', () => {
+  const stdout = '(clarify timed out after 120s — agent will decide) Voici un résumé des actualités.';
+  assert.equal(parseHermesOutput(stdout, '').response, 'Voici un résumé des actualités.');
+});
+
+test('parseHermesOutput — strips a clarify status on its own line', () => {
+  const stdout = '(clarify timed out after 5s — agent will decide)\nRéponse réelle.';
+  assert.equal(parseHermesOutput(stdout, '').response, 'Réponse réelle.');
+});
+
+test('parseHermesOutput — leaves a non-leading parenthetical untouched', () => {
+  const stdout = 'Voici la réponse (clarify quand même, agent will decide). Fin.';
+  assert.equal(parseHermesOutput(stdout, '').response, 'Voici la réponse (clarify quand même, agent will decide). Fin.');
+});
