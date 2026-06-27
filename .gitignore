@@ -3,6 +3,11 @@
 .env.vault
 .env.previous
 
+# Stray Hermes home: running `hermes` from the repo outside dotenvx reads the
+# encrypted HERMES_HOME as a literal path and creates a junk home named after
+# the ciphertext (with auth state inside). Never commit it. (issue 25e947a)
+encrypted:*
+
 # Dependencies
 node_modules/
 
