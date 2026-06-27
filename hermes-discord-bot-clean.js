@@ -7,7 +7,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { execFile } = require('child_process');
 const path = require('path');
-const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes } = require('./prompts');
+const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('./prompts');
 
 // Hermes CLI path
 const HERMES_BIN = '/data/.local/bin/hermes';
@@ -150,11 +150,6 @@ function getSessionKey(message) {
 }
 
 // Extract session_id from Hermes stdout
-function extractSessionId(stdout) {
-  const match = stdout.match(/session_id:\s*(\S+)/);
-  return match ? match[1] : null;
-}
-
 // French messages
 const messagesFR = {
   greeting: "👋 Bonjour ! Je suis {botName}, votre assistant IA Hermes.\n" +
@@ -184,7 +179,7 @@ const messagesFR = {
 
 // Function to communicate with Hermes via CLI
 // Returns {response, sessionId} — sessionId can be used to resume conversation
-function askHermes(question, extraContext, useWebTools, customTimeout, quiet, sessionId) {
+function askHermes(question, extraContext, useWebTools, customTimeout, sessionId) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -198,11 +193,11 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet, se
     if (useWebTools) {
       args.splice(sessionId ? 4 : 2, 0, '-t', 'web');  // insert -t web after chat
     }
-    if (quiet) {
-      args.push('-Q');  // suppress tool calls, banner, spinner
-    }
+    // -Q: programmatic output (final response only — no banner/spinner/tool previews);
+    // --source tool: tag so bot sessions stay out of the user's `hermes sessions` list.
+    args.push('-Q', '--source', 'tool');
     
-    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${quiet ? ' (quiet)' : ''}${sessionId ? ' (resume)' : ''}`);
+    console.log(`📤 Sending question to Hermes CLI: ${question}${useWebTools ? ' (web tools)' : ''}${sessionId ? ' (resume)' : ''}`);
     
     execFile(HERMES_BIN, args, {
       timeout: customTimeout || (useWebTools ? TIMEOUT_WEB : TIMEOUT_NORMAL),
@@ -225,32 +220,8 @@ function askHermes(question, extraContext, useWebTools, customTimeout, quiet, se
       console.log('--- HERMES OUTPUT ---');
       console.log(stdout);
       console.log('--- END HERMES OUTPUT ---');
-      // Extract final answer: find the text between ⚕ Hermes banner and closing ──
-      // With -Q (quiet mode), there's no banner — use full stdout
-      const lines = stdout.split('\n');
-      let response = '';
-      let inAnswer = false;
-      for (const line of lines) {
-        const trimmed = line.trim();
-        // Start capturing after the ⚕ Hermes banner
-        if (trimmed.includes('⚕ Hermes')) {
-          inAnswer = true;
-          continue;
-        }
-        // Stop at the closing ── or session summary
-        if (inAnswer && (trimmed.startsWith('──') || trimmed.startsWith('Resume') || trimmed.startsWith('Session:') || trimmed.startsWith('Duration:') || trimmed.startsWith('Messages:'))) {
-          break;
-        }
-        if (inAnswer && trimmed && !trimmed.startsWith('┌') && !trimmed.startsWith('│') && !trimmed.startsWith('└')) {
-          response += (response ? '\n' : '') + trimmed;
-        }
-      }
-      // If no banner found (quiet mode), use stdout directly, stripping Query: echo
-      if (!inAnswer) {
-        response = stdout.replace(/^Query:.*?\n\n?/s, '').trim();
-      }
-      response = response.trim();
-      const newSessionId = extractSessionId(stdout);
+      // Parse Hermes -Q output: clean response on stdout, session id on stderr.
+      const { response, sessionId: newSessionId } = parseHermesOutput(stdout, stderr);
       resolve({
         response: response || messagesFR.fallbackResponse.replace('{command}', question),
         sessionId: newSessionId
@@ -267,7 +238,7 @@ function summarizeLink(url, context) {
     
     console.log(`📤 Summarizing link: ${url}`);
     
-    execFile(HERMES_BIN, ['-p', 'discord-bot', 'chat', '-q', prompt, '-t', 'web'], {
+    execFile(HERMES_BIN, ['-p', 'discord-bot', 'chat', '-q', prompt, '-t', 'web', '-Q', '--source', 'tool'], {
       timeout: TIMEOUT_WEB,
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
@@ -287,27 +258,8 @@ function summarizeLink(url, context) {
       console.log('--- HERMES OUTPUT ---');
       console.log(stdout);
       console.log('--- END HERMES OUTPUT ---');
-      // Extract final answer: find the text between ⚕ Hermes banner and closing ──
-      const lines = stdout.split('\n');
-      let response = '';
-      let inAnswer = false;
-      for (const line of lines) {
-        const trimmed = line.trim();
-        // Start capturing after the ⚕ Hermes banner
-        if (trimmed.includes('⚕ Hermes')) {
-          inAnswer = true;
-          continue;
-        }
-        // Stop at the closing ── or session summary
-        if (inAnswer && (trimmed.startsWith('──') || trimmed.startsWith('Resume') || trimmed.startsWith('Session:') || trimmed.startsWith('Duration:') || trimmed.startsWith('Messages:'))) {
-          break;
-        }
-        if (inAnswer && trimmed && !trimmed.startsWith('┌') && !trimmed.startsWith('│') && !trimmed.startsWith('└')) {
-          response += (response ? '\n' : '') + trimmed;
-        }
-      }
-      response = response.trim();
-      // Apply unwrapText to merge mid-sentence line breaks (same as formatHermesResponse)
+      // Parse Hermes -Q output, then unwrap terminal line-breaks (as formatHermesResponse does).
+      let { response } = parseHermesOutput(stdout, stderr);
       response = unwrapText(response);
       resolve(response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`);
     });
@@ -706,8 +658,8 @@ client.on('messageCreate', async message => {
 
         const recapPrompt = buildRecapPrompt();
 
-        // Ask Hermes (quiet mode — no web tools needed for recap)
-        const { response: recapResponse } = await askHermes(recapPrompt, context, false, TIMEOUT_RECAP, true);
+        // Ask Hermes for the recap (no web tools needed)
+        const { response: recapResponse } = await askHermes(recapPrompt, context, false, TIMEOUT_RECAP);
         const rawResponse = formatHermesResponse(recapResponse);
 
         // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
@@ -769,7 +721,7 @@ client.on('messageCreate', async message => {
       const sessionKey = getSessionKey(message);
       const previousSessionId = lastSessionPerChannel.get(sessionKey);
       
-      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, extraContext, useWeb, null, false, previousSessionId);
+      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, extraContext, useWeb, null, previousSessionId);
       const formattedResponse = formatHermesResponse(hermesResponse);
       
       // Save session ID for next follow-up in this channel/thread

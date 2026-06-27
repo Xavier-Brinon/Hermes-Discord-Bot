@@ -8,7 +8,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes } = require('../prompts');
+const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('../prompts');
 
 test('buildAskPrompt — no context — byte-identical to former inline literal', () => {
   const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
@@ -52,4 +52,45 @@ test('extractThemes — ignores preamble/conclusion and short names (length <= 2
 
 test('extractThemes — no THEME lines yields [] (the "no themes" failure path)', () => {
   assert.deepEqual(extractThemes('- sujet 1\n- sujet 2'), []);
+});
+
+// parseHermesOutput — the -Q (quiet-mode) replacement for the old banner scraper.
+// Fixtures mirror real Hermes v0.17.0 output captured 2026-06-27 (issue 9864045).
+
+test('parseHermesOutput — clean -Q success: stdout is the response, id from stderr', () => {
+  const stdout = 'Bonjour ! Voici la réponse à votre question.';
+  const stderr = '\nsession_id: 20260627_105754_141970';
+  assert.deepEqual(parseHermesOutput(stdout, stderr), {
+    response: 'Bonjour ! Voici la réponse à votre question.',
+    sessionId: '20260627_105754_141970',
+  });
+});
+
+test('parseHermesOutput — drops a leaked ⚠ CLI diagnostic line (real 0.17.0 capture)', () => {
+  const stdout =
+    '  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\n' +
+    'API call failed after 3 retries: HTTP 404: model "" not found';
+  const stderr = '\nsession_id: 20260627_105754_141970';
+  assert.deepEqual(parseHermesOutput(stdout, stderr), {
+    response: 'API call failed after 3 retries: HTTP 404: model "" not found',
+    sessionId: '20260627_105754_141970',
+  });
+});
+
+test('parseHermesOutput — preserves a real ⚠️ emoji that leads the answer', () => {
+  const stdout = '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.';
+  assert.equal(parseHermesOutput(stdout, '').response, '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.');
+});
+
+test('parseHermesOutput — session id read from stderr, not stdout', () => {
+  assert.equal(parseHermesOutput('réponse sans id', 'session_id: ABC123').sessionId, 'ABC123');
+});
+
+test('parseHermesOutput — warning-only stdout yields empty response (fallback path)', () => {
+  const stdout = '  ⚠ tirith security scanner enabled but not available';
+  assert.deepEqual(parseHermesOutput(stdout, ''), { response: '', sessionId: null });
+});
+
+test('parseHermesOutput — no session id anywhere yields null', () => {
+  assert.equal(parseHermesOutput('juste une réponse', '').sessionId, null);
 });

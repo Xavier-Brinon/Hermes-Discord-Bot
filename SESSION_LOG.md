@@ -236,3 +236,40 @@ Actual 7 vs Target 8 (delta -1, under budget). Runtime harness confirms the set 
 Six of seven matrix subtasks PASS now via `node --check` (exit 0), grep counts (0 raw
 adds / 2 helper calls), an unchanged guard line, and a runtime harness (size==1000,
 oldest evicted, in-window dedup holds). The seventh (issue lifecycle) lands at merge.
+
+---
+
+# Task: hermes-quiet-parse
+complexity_score: 5
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+### Reflex Check
+- Simplicity Goal: I will use one pure `parseHermesOutput(stdout, stderr)` and the documented `-Q` programmatic contract. I will NOT keep any `⚕ Hermes` banner / box-drawing scraping or a non-quiet code path.
+- Scope Boundaries:
+  - In-scope: prompts.js, test/prompts.test.js, hermes-discord-bot-clean.js
+  - Out-of-scope: manage_hermes.sh, README.md, CLAUDE.md, evals/
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard: examples/patterns/surgical-diff.md (replace only the extraction contract; leave prompt builders and unwrapText alone)
+
+### Assumptions
+.artifacts/hermes-quiet-parse/pre_computation_block.md
+
+## Post-Flight Entry
+### Reflex Audit
+PASSED. The diff swaps the extraction contract only: two banner loops + extractSessionId deleted, one tested pure parser added; net −48 lines in the bot. No non-quiet path or banner scraping remains (grep clean). Live 0.17.0 verification first settled the `-Q` shape (response on stdout, `session_id:` on stderr) and confirmed the old scraper was NOT broken, so this is proactive, not a fix.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — none. A single free function beside extractThemes; no abstraction, no toggle.
+- [ ] **Scope Bleed** — none. Three files changed, all in the Change Boundary File Touch List; artifacts + journal declared.
+- [ ] **Style Drift** — none. Mirrors the prompts.js extract-and-test pattern (extractThemes) and surgical-diff.md.
+- [x] **Issue Lifecycle** — performed at merge: a `rad issue comment` recording patch ID + HEAD SHA, review/merge method, and `node --test` outcome precedes `rad issue state --solved 9864045`. Box checked once that comment + transition lands.
+
+### Verification Results
+.artifacts/hermes-quiet-parse/verification_matrix.md
+
+All 14 unit tests PASS (8 prior + 6 new), `node --check` clean on bot + prompts, grep confirms no `⚕ Hermes`/inAnswer/extractSessionId/quiet leftovers, and `-Q --source tool` present at both execFile sites. End-to-end against live prod lands on the VPS redeploy (local default model is misconfigured — orthogonal).

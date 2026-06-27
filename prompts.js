@@ -54,4 +54,27 @@ function extractThemes(rawResponse) {
   return themes;
 }
 
-module.exports = { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes };
+// Parser for Hermes quiet-mode (-Q) output. With -Q the agent prints ONLY the
+// final response on stdout — no `⚕ Hermes` banner, no `Query:` echo, no session
+// summary — and the session id on stderr as `session_id: <id>`. Startup
+// diagnostics (e.g. a security-scanner warning) can still leak onto the first
+// stdout lines, so we drop leading blank lines and leaked `⚠ ` CLI warnings
+// before the response. Returns { response, sessionId }. Replaces the old
+// banner-scraping loops + extractSessionId(stdout). See issue 9864045.
+function parseHermesOutput(stdout, stderr) {
+  const lines = String(stdout || '').split('\n');
+  let i = 0;
+  // Skip leading blanks and leaked CLI diagnostics: a bare `⚠` (U+26A0) NOT
+  // followed by the emoji variation selector — so a real `⚠️` answer survives.
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (t === '' || (t.charCodeAt(0) === 0x26A0 && t.charCodeAt(1) !== 0xFE0F)) { i++; continue; }
+    break;
+  }
+  const response = lines.slice(i).join('\n').trim();
+  // -Q emits `session_id:` on stderr; search stderr first, fall back to stdout.
+  const idMatch = `${stderr || ''}\n${stdout || ''}`.match(/session_id:\s*(\S+)/);
+  return { response, sessionId: idMatch ? idMatch[1] : null };
+}
+
+module.exports = { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput };
