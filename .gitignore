@@ -14,6 +14,9 @@ node_modules/
 # Runtime artifacts
 .link_cache.json
 .session_cache.json
+# Transient recap context offloaded for Hermes @file: injection (issue 1f154fc);
+# cleaned up after each call, but ignore in case a crash orphans one.
+.hermes-recap-ctx-*.txt
 *.log
 
 # PM2

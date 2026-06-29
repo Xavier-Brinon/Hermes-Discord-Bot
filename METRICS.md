@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-06-27T14:41:04Z
-source_count: 5
+timestamp: 2026-06-29T13:42:34Z
+source_count: 6
 ---
 
 # Metrics — @YackShavingSkill
@@ -23,13 +23,14 @@ they do not represent current drift. Canonical definition:
 | hermes-quiet-parse | STANDARD | PASS | 100% |
 | processed-messages-bound | STANDARD | PASS | 100% |
 | prompt-eval-harness | STANDARD | PASS | 100% |
+| recap-context-file | COMPLEX | PASS | 100% |
 | timeout-web-aware | STANDARD | PASS | 100% |
 | watchdog-restart-reset | STANDARD | PASS | 100% |
 
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 5 |
+| Total tasks | 6 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 100.0% |
 
@@ -48,3 +49,4 @@ they do not represent current drift. Canonical definition:
 | 2026-06-25T09:36:36Z | timeout-web-aware | 100% |
 | 2026-06-25T21:05:08Z | processed-messages-bound | 100% |
 | 2026-06-27T11:07:09Z | hermes-quiet-parse | 100% |
+| 2026-06-29T12:07:12Z | recap-context-file | 100% |

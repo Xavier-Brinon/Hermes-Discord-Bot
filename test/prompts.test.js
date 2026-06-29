@@ -8,7 +8,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('../prompts');
+const { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('../prompts');
 
 test('buildAskPrompt — no context — byte-identical to former inline literal', () => {
   const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
@@ -18,6 +18,17 @@ test('buildAskPrompt — no context — byte-identical to former inline literal'
 test('buildAskPrompt — with context — prepends "Contexte :" + blank line', () => {
   const expected = `Contexte : dernier article: http://x\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : et alors ?`;
   assert.equal(buildAskPrompt('et alors ?', 'dernier article: http://x'), expected);
+});
+
+test('buildAskPromptWithContextFile — byte-identical literal with @file: ref', () => {
+  const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Résume le canal\n\nLe contexte de la conversation est fourni en pièce jointe. @file:.hermes-recap-ctx-1.txt`;
+  assert.equal(buildAskPromptWithContextFile('Résume le canal', '.hermes-recap-ctx-1.txt'), expected);
+});
+
+test('buildAskPromptWithContextFile — @file: token is preceded by whitespace (so Hermes parses it)', () => {
+  // context_references REFERENCE_PATTERN requires (?<![\w/]) before @ — a space qualifies.
+  const out = buildAskPromptWithContextFile('Q', 'ctx.txt');
+  assert.match(out, / @file:ctx\.txt$/);
 });
 
 test('buildLinkPrompt — byte-identical, context provided', () => {

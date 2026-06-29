@@ -275,3 +275,42 @@ PASSED. The diff swaps the extraction contract only: two banner loops + extractS
 All 14 unit tests PASS (8 prior + 6 new), `node --check` clean on bot + prompts, grep confirms no `⚕ Hermes`/inAnswer/extractSessionId/quiet leftovers, and `-Q --source tool` present at both execFile sites. End-to-end against live prod lands on the VPS redeploy (local default model is misconfigured — orthogonal).
 
 > **Correction (2026-06-27, issue 25e947a):** the verification's model-404 was the stray `HERMES_HOME` junk home (empty, no model) that `hermes` created when run from the repo dir outside dotenvx — NOT a misconfigured local profile. The real `~/.hermes` default is fine. The `-Q` shape findings stand (CLI framing is home/model-independent).
+
+---
+
+# Task: recap-context-file
+complexity_score: 6
+complexity_tier: COMPLEX
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will add one byte-threshold guard in `askHermes` that offloads *only* the bulky `extraContext` to a temp file under `process.cwd()` and references it via Hermes's own `@file:` context-reference. I will NOT add a stdin/streaming layer (the CLI doesn't read the query from stdin — verified), NOT add a chunking/summarisation pass, and NOT touch the small-prompt argv path (it stays byte-identical for normal @mentions).
+- **Scope Boundaries:**
+  - In-scope: `hermes-discord-bot-clean.js` (askHermes offload + temp-file helpers), `prompts.js` (one `buildAskPromptWithContextFile` builder + export), `test/prompts.test.js` (unit test for the builder), `.gitignore` (ignore the transient temp file pattern)
+  - Out-of-scope: `summarizeLink` (small context, no overflow), `manage_hermes.sh`, `README.md`, `CLAUDE.md`, `evals/` (recap prompt/parser contract unchanged)
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard: examples/patterns/surgical-diff.md (offload at the single shared chokepoint; leave the common path and prompt builders untouched)
+
+### Assumptions
+.artifacts/recap-context-file/pre_computation_block.md
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The approach committed to in Pre-Flight held exactly: one byte-threshold guard at the single shared chokepoint (`askHermes`) offloads only the bulky `extraContext` via Hermes's `@file:` reference; no stdin/streaming layer (verified the CLI can't read the query from stdin), no chunking/summarisation, and the small @mention path is byte-identical (offload harness case A confirms a normal prompt produces no temp file and keeps inline `Contexte :`). The one deviation is size, not design: the diff came in at 36 logical LOC vs a 26-line pre-code estimate (+38%). That overage is mandatory I/O scaffolding (write + cleanup helpers with error handling, mirroring `saveCache`/`saveSessionCache`), not added abstraction — re-planned and justified in the Simplicity Review's Simplify Triggers per `skills/simplicity.md` instruction 3, so it is a recorded re-plan, not an unrecorded budget violation.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — none. No flag, config knob, class, or generalisation; nothing on the Abstinence List was added. The line overage is necessary I/O scaffolding, recorded as a Simplify Trigger.
+- [ ] **Scope Bleed** — none. Changed files (prompts.js, hermes-discord-bot-clean.js, test/prompts.test.js, .gitignore) + artifacts/journal/METRICS are all in the Change Boundary File Touch List; `summarizeLink` left on argv as declared off-limits.
+- [ ] **Style Drift** — none. Matches `examples/patterns/surgical-diff.md` (offload at the one chokepoint, common path untouched) and the repo's named-helper idiom; new prompt builder lives in prompts.js beside `buildAskPrompt`.
+- [x] **Issue Lifecycle** — performed at merge: a `rad issue comment` recording patch ID + HEAD SHA, review/merge method, and node --check/--test/harness outcomes precedes `rad issue state --solved 1f154fc`. Box checked once that comment + transition lands.
+
+### Verification Results
+.artifacts/recap-context-file/verification_matrix.md
+
+9 of 10 matrix subtasks PASS now: `node --check` clean on bot + prompts, `node --test` 19/19 (17 prior + 2 new builder cases), and the offload harness proves the round trip — small prompt stays inline (A), a 148504 B context offloads to a 263 B argv + `@file:` ref under cwd (B), cleanup removes the temp file (C), and Hermes inlines the written file (D: expanded, blocked=False, 35604 tokens, `@copain` mentions kept literal). The 10th (issue lifecycle) lands at merge. Live prod E2E lands on the VPS redeploy (the discord-bot profile/model exists only on the VPS; the `@file:` mechanism is profile-independent and was validated against the real `context_references` module).

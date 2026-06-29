@@ -19,6 +19,17 @@ function buildAskPrompt(question, extraContext) {
   return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
 }
 
+// Q&A prompt variant for when extraContext is too large to pass as a single CLI
+// argv (Linux MAX_ARG_STRLEN, ~128 KB) — the recap path is the trigger. Instead of
+// inlining the context, the bot writes it to a file and we reference it with Hermes's
+// own `@file:` context-reference; Hermes strips the token and appends the file under
+// "--- Attached Context ---". Same instruction/question framing as buildAskPrompt; the
+// `@file:` token must be preceded by whitespace and the ref must resolve under Hermes's
+// cwd. See issue 1f154fc.
+function buildAskPromptWithContextFile(question, contextFileRef) {
+  return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}\n\nLe contexte de la conversation est fourni en pièce jointe. @file:${contextFileRef}`;
+}
+
 // Link-summary prompt (summarizeLink). Verbatim multi-line literal.
 function buildLinkPrompt(url, context) {
   return `Résume en français le contenu de ce lien : ${url}.
@@ -81,4 +92,4 @@ function parseHermesOutput(stdout, stderr) {
   return { response, sessionId: idMatch ? idMatch[1] : null };
 }
 
-module.exports = { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput };
+module.exports = { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput };

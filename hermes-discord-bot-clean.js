@@ -7,7 +7,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { execFile } = require('child_process');
 const path = require('path');
-const { buildAskPrompt, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('./prompts');
+const { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('./prompts');
 
 // Hermes CLI path
 const HERMES_BIN = '/data/.local/bin/hermes';
@@ -177,15 +177,61 @@ const messagesFR = {
                    "Pouvez-vous reformuler ou poser une autre question ?"
 };
 
+// A single CLI argv string is capped by the kernel (Linux MAX_ARG_STRLEN ≈ 128 KB).
+// A busy channel recap assembles ~100 K chars of history (≈138 KB in UTF-8) into the
+// -q prompt, which can overflow that cap and fail with E2BIG. When the assembled prompt
+// crosses this conservative ceiling we offload the bulky context to a temp file and let
+// Hermes inline it via its `@file:` context-reference instead of passing it on argv.
+// The small @mention/DM path never crosses the threshold, so it is unchanged. (issue 1f154fc)
+const MAX_ARGV_PROMPT_BYTES = 96 * 1024;
+
+// Monotonic suffix so concurrent recaps never collide on a temp filename.
+let contextFileSeq = 0;
+
+// Write context to a temp .txt under process.cwd() — which is also Hermes's cwd
+// (execFile sets no cwd), so the file is inside Hermes's `@file:` allowed_root. Returns
+// { path, basename }, or null on failure (caller then falls back to the inline argv).
+function writeContextFile(context) {
+  try {
+    const fs = require('fs');
+    const basename = `.hermes-recap-ctx-${process.pid}-${Date.now()}-${contextFileSeq++}.txt`;
+    const fullPath = path.join(process.cwd(), basename);
+    fs.writeFileSync(fullPath, context, 'utf-8');
+    return { path: fullPath, basename };
+  } catch (e) {
+    console.error('Failed to write context file:', e.message);
+    return null;
+  }
+}
+
+function cleanupContextFile(fullPath) {
+  try {
+    require('fs').unlinkSync(fullPath);
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error('Failed to remove context file:', e.message);
+  }
+}
+
 // Function to communicate with Hermes via CLI
 // Returns {response, sessionId} — sessionId can be used to resume conversation
 function askHermes(question, extraContext, useWebTools, customTimeout, sessionId) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    
+
     // Always instruct Hermes to respond in French, no hard line breaks (see prompts.js)
-    const prompt = buildAskPrompt(question, extraContext);
-    
+    let prompt = buildAskPrompt(question, extraContext);
+
+    // If the assembled prompt is too large for a single argv (E2BIG risk), offload the
+    // bulky context to a temp file Hermes inlines via @file:. See issue 1f154fc.
+    let contextFile = null;
+    if (extraContext && Buffer.byteLength(prompt, 'utf-8') > MAX_ARGV_PROMPT_BYTES) {
+      contextFile = writeContextFile(extraContext);
+      if (contextFile) {
+        prompt = buildAskPromptWithContextFile(question, contextFile.basename);
+        console.log(`📎 Large context (${Buffer.byteLength(extraContext, 'utf-8')} B) offloaded to @file:${contextFile.basename}`);
+      }
+    }
+
     const args = ['-p', 'discord-bot', 'chat', '-q', prompt];
     if (sessionId) {
       args.splice(2, 0, '--resume', sessionId);  // insert --resume <id> after -p discord-bot
@@ -203,8 +249,9 @@ function askHermes(question, extraContext, useWebTools, customTimeout, sessionId
       timeout: customTimeout || (useWebTools ? TIMEOUT_WEB : TIMEOUT_NORMAL),
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
+      if (contextFile) cleanupContextFile(contextFile.path);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      
+
       if (error) {
         console.error(`❌ Hermes CLI error (${elapsed}s):`, stderr || error.message);
         console.error('   stdout was:', stdout || '(empty)');
