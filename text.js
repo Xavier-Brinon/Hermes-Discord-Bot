@@ -1,10 +1,13 @@
 // text.js
-// Pure text/URL helpers the bot uses to shape Hermes output and classify links.
-// Extracted verbatim from hermes-discord-bot-clean.js so they can be unit-tested
-// without the bot's Discord-login side effects (issue 6115cc3). No module state,
-// no I/O — given the same input these always return the same output.
+// Text/URL helpers the bot uses to shape Hermes output and classify links. The core
+// helpers (unwrapText, splitAtBoundaries, isNonArticleUrl) are pure and unit-tested
+// (issue 6115cc3). formatHermesResponse + sendLongResponse were added with the
+// modularisation (issue 950dc54): formatHermesResponse is pure; sendLongResponse does
+// Discord I/O (it splits then sends), operating on a duck-typed message object.
 
 'use strict';
+
+const { messagesFR, DISCORD_MSG_LIMIT } = require('./config');
 
 // URLs that are NOT articles — skip silently (used to filter auto link-summaries).
 const NON_ARTICLE_PATTERN = /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|reddit\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
@@ -107,4 +110,48 @@ function splitAtBoundaries(text, maxLen) {
   return chunks;
 }
 
-module.exports = { NON_ARTICLE_PATTERN, isNonArticleUrl, unwrapText, splitAtBoundaries };
+// Format a Hermes response for Discord: unwrap terminal line-breaks, or fall back to the
+// French "no info" message when empty. No truncation — the caller handles splitting.
+function formatHermesResponse(response) {
+  if (!response) return messagesFR.fallbackResponse;
+  return unwrapText(response);
+}
+
+// Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
+// and post the chunks — directly in a thread, or in a new thread otherwise.
+async function sendLongResponse(message, text) {
+  if (text.length <= DISCORD_MSG_LIMIT) {
+    // Fits in one message — simple reply
+    await message.reply(text);
+    return;
+  }
+
+  const chunks = splitAtBoundaries(text, DISCORD_MSG_LIMIT);
+
+  // If already in a thread, post chunks directly — no sub-thread
+  if (message.channel.isThread()) {
+    for (const chunk of chunks) {
+      await message.channel.send(chunk);
+    }
+    return;
+  }
+
+  // Create a thread and post chunks
+  const thread = await message.startThread({
+    name: '📄 Réponse détaillée',
+    autoArchiveDuration: 60
+  });
+
+  for (const chunk of chunks) {
+    await thread.send(chunk);
+  }
+}
+
+module.exports = {
+  NON_ARTICLE_PATTERN,
+  isNonArticleUrl,
+  unwrapText,
+  splitAtBoundaries,
+  formatHermesResponse,
+  sendLongResponse,
+};

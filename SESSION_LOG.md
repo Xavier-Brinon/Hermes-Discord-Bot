@@ -353,3 +353,42 @@ PASSED. The Simplicity Goal held: `unwrapText`/`splitAtBoundaries` moved into `t
 .artifacts/test-pure-helpers/verification_matrix.md
 
 10 of 11 matrix subtasks PASS now: `node --test` 41 (40 pass / 0 fail / 1 documented-bug skip), `node --check` clean on bot+text+recap, grep confirms no dangling inline defs (only imports + call sites), `npm run lint` exit 0. The 11th (issue lifecycle) lands at merge. Three pre-existing timeframe-parser bugs surfaced by the new tests are documented for a follow-up issue (see flag to user), not fixed here.
+
+---
+
+# Task: modularise-entrypoint
+complexity_score: 6
+complexity_tier: COMPLEX
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will split the entrypoint along the issue's natural seams by RELOCATING existing code verbatim into modules — `config.js` (constants + env-overridable paths, folding in df0d693), `hermes-cli.js` (askHermes/summarizeLink/temp-file helpers), `cache.js` (the two Maps + load + accessors), and growing `text.js` (+formatHermesResponse, +sendLongResponse) and `recap.js` (+fetchChannelHistory, +scanChannelForLinks) — leaving the entrypoint as Discord client + handlers wiring. The one behaviour-shaped change is `askHermes` → options object (issue requirement) + env-overridable paths (df0d693). I will NOT rewrite handler logic, NOT change prompt/parse contracts, NOT introduce a DI framework or class hierarchy, and I will keep the module graph acyclic (config is a leaf).
+- **Scope Boundaries:**
+  - In-scope: `config.js`, `hermes-cli.js`, `cache.js` (new); `text.js`, `recap.js` (grow); `hermes-discord-bot-clean.js` (slim to wiring + handlers); `test/modules.test.js` (new module-load test)
+  - Out-of-scope: prompts.js contracts, the 3 timeframe bugs (separate follow-up), manage_hermes.sh, README.md, CLAUDE.md, evals/, the watchdog (c226bf1), global error handlers (1ff433a)
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard: examples/patterns/surgical-diff.md (relocation must be behaviour-faithful — move, don't rewrite; the only intentional behaviour deltas are the documented askHermes options-object + env-overridable paths) and examples/patterns/minimal-scaffold.md (new module shape)
+
+### Assumptions
+.artifacts/modularise-entrypoint/pre_computation_block.md
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The split followed the issue's seams by relocating code faithfully: config.js (constants + env-overridable paths), hermes-cli.js (askHermes/summarizeLink/temp-file helpers), cache.js (Maps behind save-on-write accessors), text.js (+formatHermesResponse/sendLongResponse), recap.js (+fetchChannelHistory/scanChannelForLinks); the entrypoint slimmed 748→386 lines to client + handlers + notifyAdmin/finalizeReaction/dedup. Behaviour preservation is evidenced beyond `node --check`: the messageCreate handler body is verbatim, `messagesFR` is byte-identical to HEAD (deepEqual against the previous commit's inline object), and the module-load test proves the dependency graph is acyclic with every import resolving. The only intentional behaviour deltas are the two committed-to changes: `askHermes` → options object (issue requirement) and env-overridable paths (df0d693, folded in per the user's decision). Budget came in at 365 logical LOC vs a 280 estimate (+30%) — recorded as a Simplify Trigger: it is relocation volume across a 5-module split (the entrypoint *lost* 433 lines; ~30 LOC is genuinely new), not added complexity.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — none. Plain CommonJS modules, no DI/class/abstraction; nothing on the Abstinence List added. The +30% budget overage is relocation, recorded as a Simplify Trigger.
+- [ ] **Scope Bleed** — none. All changed files in the Change Boundary Touch List; df0d693's env-overridable paths were folded into config.js by explicit user decision (documented in the issue text + Pre-Flight).
+- [ ] **Style Drift** — none. Module + export shape matches prompts.js/text.js/recap.js; surgical-diff (move, don't rewrite); the handler control flow is unchanged.
+- [x] **Issue Lifecycle** — performed at merge: `rad issue comment` recording patch ID + HEAD SHA + verification precedes `rad issue state --solved` for BOTH 950dc54 and df0d693 (df0d693 closed by the folded-in env-overridable paths). Box checked once both comment+transition pairs land.
+
+### Verification Results
+.artifacts/modularise-entrypoint/verification_matrix.md
+
+10 of 11 matrix subtasks PASS now: `node --check` clean on all 6 files; `node --test` 47 (46 pass / 0 fail / 1 documented-bug skip), including 6 new module-load tests (acyclic graph + exports + df0d693 env-override); `npm run lint` exit 0; messagesFR byte-identical to HEAD; entrypoint 748→386 with no dangling refs / orphan requires. The 11th (issue lifecycle, both issues) lands at merge. Live @mention/link/recap smoke test lands on the VPS redeploy (no automated handler tests exist).

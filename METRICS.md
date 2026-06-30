@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-06-30T14:15:09Z
-source_count: 7
+timestamp: 2026-06-30T17:40:48Z
+source_count: 8
 ---
 
 # Metrics — @YackShavingSkill
@@ -21,6 +21,7 @@ they do not represent current drift. Canonical definition:
 | task_id | tier | Reflex Rate | Scope Adherence |
 |---------|------|-------------|-----------------|
 | hermes-quiet-parse | STANDARD | PASS | 100% |
+| modularise-entrypoint | COMPLEX | PASS | 100% |
 | processed-messages-bound | STANDARD | PASS | 100% |
 | prompt-eval-harness | STANDARD | PASS | 100% |
 | recap-context-file | COMPLEX | PASS | 100% |
@@ -31,7 +32,7 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 7 |
+| Total tasks | 8 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 100.0% |
 
@@ -52,3 +53,4 @@ they do not represent current drift. Canonical definition:
 | 2026-06-27T11:07:09Z | hermes-quiet-parse | 100% |
 | 2026-06-29T12:07:12Z | recap-context-file | 100% |
 | 2026-06-30T14:13:05Z | test-pure-helpers | 100% |
+| 2026-06-30T17:38:17Z | modularise-entrypoint | 100% |

@@ -1,10 +1,13 @@
 // recap.js
-// Pure recap-input helpers. parseTimeframe lifts the timeframe date-math out of the
-// recap handler in hermes-discord-bot-clean.js (issue 6115cc3) so it can be unit-tested.
-// The impure parts (fetchChannelHistory, the <10-message extend-to-30-days fallback,
-// the 200-message cap) stay in the handler. Given `content` + `now`, this is pure.
+// Recap-input helpers. parseTimeframe (pure: content + now → {daysBack,sinceTs,untilTs})
+// is unit-tested (issue 6115cc3). fetchChannelHistory + scanChannelForLinks were moved
+// here with the modularisation (issue 950dc54); they do Discord I/O (channel.messages.fetch)
+// so they aren't pure. The orchestration around them (the <10-message extend-to-30-days
+// fallback, the 200-message cap) stays in the handler.
 
 'use strict';
+
+const { LINK_PATTERN } = require('./config');
 
 // French + English month names → 0-based month index.
 // Pre-existing quirks carried over verbatim from the inline block (issue 6115cc3,
@@ -72,4 +75,103 @@ function parseTimeframe(content, now) {
   return { daysBack, sinceTs, untilTs };
 }
 
-module.exports = { MONTH_NAMES, parseTimeframe };
+// Scan recent channel messages for links (fallback when the link cache is empty).
+async function scanChannelForLinks(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 50 });
+    const links = [];
+    for (const [, msg] of messages) {
+      if (msg.author.bot) continue;
+      const found = msg.content.match(LINK_PATTERN);
+      if (found) {
+        for (const link of found) {
+          links.push({ url: link, author: msg.author.tag, content: msg.content.substring(0, 200) });
+        }
+      }
+    }
+    return links;
+  } catch (e) {
+    console.error('Failed to scan channel for links:', e.message);
+    return [];
+  }
+}
+
+// Fetch channel history for a given time range.
+// Accepts either { daysBack } (relative to now) or { since, until } (absolute ms timestamps).
+async function fetchChannelHistory(channel, opts = {}) {
+  try {
+    let since, until;
+    if (opts.since && opts.until) {
+      since = opts.since;
+      until = opts.until;
+    } else {
+      const daysBack = opts.daysBack || 7;
+      since = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+      until = Date.now();
+    }
+    const sinceDate = new Date(since).toISOString();
+    const untilDate = new Date(until).toISOString();
+    console.log(`📜 Fetching history for #${channel.name}, range: ${sinceDate} → ${untilDate}`);
+    const allMessages = [];
+    let lastId = null;
+    let fetched = 0;
+    let stopped = false;
+
+    while (!stopped) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+
+      const batch = await channel.messages.fetch(options);
+      if (batch.size === 0) {
+        console.log(`📜 No more messages returned by API (fetched ${fetched} total)`);
+        break;
+      }
+
+      const firstMsg = batch.first();
+      const lastMsg = batch.last();
+      console.log(`📜 Batch: ${batch.size} msgs, range: ${new Date(lastMsg.createdTimestamp).toISOString()} → ${new Date(firstMsg.createdTimestamp).toISOString()}`);
+
+      // If the NEWEST message in this batch is already older than cutoff, stop
+      if (firstMsg.createdTimestamp < since) {
+        console.log(`📜 Entire batch is older than cutoff, stopping`);
+        break;
+      }
+
+      for (const [, msg] of batch) {
+        if (msg.createdTimestamp < since) {
+          // This message is too old, skip it but keep going through the batch
+          continue;
+        }
+        if (msg.createdTimestamp > until) {
+          // This message is too new (future batches will cover it), skip
+          continue;
+        }
+        allMessages.push({
+          author: msg.author.tag,
+          content: msg.content.substring(0, 500),
+          timestamp: msg.createdAt.toISOString(),
+          hasLinks: LINK_PATTERN.test(msg.content),
+          isBot: msg.author.bot
+        });
+      }
+
+      lastId = batch.last().id;
+      fetched += batch.size;
+      console.log(`📜 Collected ${allMessages.length} in-window messages so far (${fetched} total fetched)...`);
+
+      // Safety limit: max 5000 messages fetched
+      if (fetched >= 5000) {
+        console.log(`📜 Hit safety limit of 5000 messages`);
+        break;
+      }
+    }
+
+    console.log(`📜 Done: ${allMessages.length} messages in window`);
+    return allMessages.reverse();
+  } catch (e) {
+    console.error('Failed to fetch channel history:', e.message);
+    return [];
+  }
+}
+
+module.exports = { MONTH_NAMES, parseTimeframe, scanChannelForLinks, fetchChannelHistory };
