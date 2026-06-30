@@ -9,17 +9,13 @@
 
 const { LINK_PATTERN } = require('./config');
 
-// French + English month names → 0-based month index.
-// Pre-existing quirks carried over verbatim from the inline block (issue 6115cc3,
-// Orthogonal Issues) — preserved here, fixed in a separate behaviour-changing follow-up:
-//   1. 'février'/'fevrier' map to 0 (January), not 1. Only the ASCII 'fevrier' is
-//      reachable (see quirk 2); the English 'february' is correct (1).
-//   2. The match regex below uses `\w+` with no `u` flag, so accented month names
-//      (février, décembre, août) capture only up to the accent and never match —
-//      they silently fall through to the default window. ASCII spellings work.
-//   3. The regex requires the French "mois …"; English "month of X" is not handled.
+// French + English month names → 0-based month index. The capture regex below is
+// Unicode-aware (`u` flag + `\p{L}+`) so accented French months (février, décembre,
+// août) match, and it accepts both the French "mois …" and English "month of …"
+// prefixes. Three bugs fixed in issue 3471651 (accented months fell through, English
+// was unhandled, 'fevrier' mapped to January); behaviour is pinned by test/recap.test.js.
 const MONTH_NAMES = {
-  'janvier':0,'février':0,'fevrier':0,'mars':2,'avril':3,'mai':4,'juin':5,
+  'janvier':0,'février':1,'fevrier':1,'mars':2,'avril':3,'mai':4,'juin':5,
   'juillet':6,'aout':7,'août':7,'septembre':8,'octobre':9,'novembre':10,
   'décembre':11,'decembre':11,
   'january':0,'february':1,'march':2,'april':3,'may':4,'june':5,
@@ -33,10 +29,12 @@ function parseTimeframe(content, now) {
   let daysBack = 7; // default: 1 week
   let sinceTs = null, untilTs = null; // absolute timestamps for month-based requests
 
-  // "mois de mai", "mois d'avril", "month of may" → only that month
-  const monthMatch = content.match(/mois\s+(d['e]|de\s+)?(\w+)/i);
-  if (monthMatch && MONTH_NAMES[monthMatch[2].toLowerCase()] !== undefined) {
-    const m = MONTH_NAMES[monthMatch[2].toLowerCase()];
+  // "mois de mai", "mois d'avril", "month of may" → only that month.
+  // `\p{L}+` + the `u` flag captures accented month names; the prefix accepts both
+  // the French "mois [d'|de] …" and the English "month of …".
+  const monthMatch = content.match(/(?:mois\s+(?:d['e]|de\s+)?|month\s+of\s+)(\p{L}+)/iu);
+  if (monthMatch && MONTH_NAMES[monthMatch[1].toLowerCase()] !== undefined) {
+    const m = MONTH_NAMES[monthMatch[1].toLowerCase()];
     let year = now.getFullYear();
     if (m > now.getMonth()) year--; // future month → last year
     sinceTs = new Date(year, m, 1).getTime();

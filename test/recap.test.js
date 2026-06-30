@@ -30,17 +30,17 @@ test('parseTimeframe — a future ASCII month rolls back a year ("mois de novemb
   assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2025, 10)); // November = index 10
 });
 
-// --- documented limitations carried over verbatim (issue 6115cc3 Orthogonal Issues) ---
+// --- behaviours fixed in issue 3471651 (were documented limitations under 6115cc3) ---
 
-test('parseTimeframe — LIMITATION: English "month of X" is not handled (regex requires "mois") → default 7d', () => {
+test('parseTimeframe — English "month of X" scopes to that month (May 2026)', () => {
   const r = parseTimeframe('recap the month of may', NOW);
-  assert.deepEqual(r, { daysBack: 7, sinceTs: null, untilTs: null });
+  assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 4));
 });
 
-test('parseTimeframe — LIMITATION: accented French months fall through (\\w+ has no u-flag, stops at the accent) → default 7d', () => {
-  // "mois de décembre" captures only "d" → not a month name → default window
+test('parseTimeframe — accented French month "décembre" matches (future → rolls back to Dec 2025)', () => {
+  // \p{L}+ with the u flag now captures past the accent; December > June → previous year
   const r = parseTimeframe('le mois de décembre', NOW);
-  assert.deepEqual(r, { daysBack: 7, sinceTs: null, untilTs: null });
+  assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2025, 11));
 });
 
 test('parseTimeframe — "mois dernier" → the previous month (May 2026)', () => {
@@ -81,15 +81,14 @@ test('parseTimeframe — no timeframe phrase → default 7 days, no timestamps',
   assert.deepEqual(r, { daysBack: 7, sinceTs: null, untilTs: null });
 });
 
-// KNOWN BUG carried over verbatim (issue 6115cc3 Orthogonal Issue): the ASCII spelling
-// 'fevrier' DOES match the regex but MONTH_NAMES maps it to month 0 (January) instead
-// of 1. Skipped so the suite stays green while documenting the intended behaviour for
-// the follow-up fix. (The accented 'février' never reaches this — \w+ stops at the é.)
-test(
-  'parseTimeframe — ASCII "fevrier" should scope to February',
-  { skip: 'KNOWN BUG: MONTH_NAMES["fevrier"] = 0 (January); fix tracked as a follow-up' },
-  () => {
-    const r = parseTimeframe('le mois de fevrier', NOW);
-    assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 1));
-  }
-);
+// Fixed in issue 3471651: MONTH_NAMES now maps both 'fevrier' and 'février' to 1,
+// and the accented spelling reaches the map via the Unicode-aware regex.
+test('parseTimeframe — ASCII "fevrier" scopes to February', () => {
+  const r = parseTimeframe('le mois de fevrier', NOW);
+  assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 1));
+});
+
+test('parseTimeframe — accented "février" scopes to February (Unicode regex + corrected map)', () => {
+  const r = parseTimeframe('le mois de février', NOW);
+  assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 1));
+});
