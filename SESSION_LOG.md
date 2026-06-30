@@ -314,3 +314,42 @@ PASSED. The approach committed to in Pre-Flight held exactly: one byte-threshold
 .artifacts/recap-context-file/verification_matrix.md
 
 9 of 10 matrix subtasks PASS now: `node --check` clean on bot + prompts, `node --test` 19/19 (17 prior + 2 new builder cases), and the offload harness proves the round trip — small prompt stays inline (A), a 148504 B context offloads to a 263 B argv + `@file:` ref under cwd (B), cleanup removes the temp file (C), and Hermes inlines the written file (D: expanded, blocked=False, 35604 tokens, `@copain` mentions kept literal). The 10th (issue lifecycle) lands at merge. Live prod E2E lands on the VPS redeploy (the discord-bot profile/model exists only on the VPS; the `@file:` mechanism is profile-independent and was validated against the real `context_references` module).
+
+---
+
+# Task: test-pure-helpers
+complexity_score: 6
+complexity_tier: COMPLEX
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will move the existing pure functions verbatim into modules — `text.js` (`unwrapText`, `splitAtBoundaries`, `isNonArticleUrl`) and `recap.js` (`parseTimeframe(content, now)` lifted from the inline recap block) — wire the bot to import them, and unit-test them with built-in `node:test`. I will NOT rewrite the helpers' logic (byte-faithful move), NOT add a test-framework dependency, NOT modularise config/hermes/cache (that is 950dc54), and NOT attempt a full legacy-lint cleanup (the new eslint+prettier is set up and runnable; pre-existing legacy findings are out of scope).
+- **Scope Boundaries:**
+  - In-scope: `text.js`, `recap.js`, `test/text.test.js`, `test/recap.test.js`, `eslint.config.js`, `.prettierrc`, `package.json`, `hermes-discord-bot-clean.js`
+  - Out-of-scope: `prompts.js`, askHermes/summarizeLink, the config/hermes/cache modules (950dc54), manage_hermes.sh, README.md, CLAUDE.md, evals/
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard: examples/patterns/surgical-diff.md (the helpers move byte-faithfully — extract, don't rewrite — so behaviour is provably unchanged; the inline timeframe block becomes a pure `parseTimeframe` with the fetch/extend logic left behind in the handler)
+
+### Assumptions
+.artifacts/test-pure-helpers/pre_computation_block.md
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The Simplicity Goal held: `unwrapText`/`splitAtBoundaries` moved into `text.js` byte-for-byte, `parseTimeframe(content, now)` lifted verbatim into `recap.js` (only the date-math; the fetch/extend/cap logic stayed in the handler), bot rewired to import them, and the inline copies deleted (grep-clean). Tests use built-in `node:test` (no dependency). I did NOT rewrite helper logic — and the tests proved it by pinning the *actual* behaviour, which surfaced three pre-existing latent bugs in the timeframe parser (accented French months fail because `\w+` has no `u` flag; English "month of X" isn't matched; ASCII `fevrier` maps to January). Per the "verbatim move" goal these were preserved, documented (recap.js NOTE, two limitation tests, one skipped bug test, Orthogonal Issues), and flagged for a follow-up — not fixed mid-extraction. Line budget 128 vs 145 target (-12%, under); the bot shed 157 lines. eslint(flat)+prettier added; `npm run lint` exits 0 (0 errors, 4 pre-existing legacy warnings).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — none. No abstraction/flag/knob; the diff is a relocation + tests + a standard linter config. Nothing on the Abstinence List was added.
+- [ ] **Scope Bleed** — none. All changed files (text.js, recap.js, test/text.test.js, test/recap.test.js, eslint.config.js, .prettierrc, package.json, package-lock.json, bot) are in the Change Boundary Touch List; config/hermes/cache modularisation left for 950dc54.
+- [ ] **Style Drift** — none. Mirrors the prompts.js module + test/prompts.test.js pattern and surgical-diff.md (move, don't rewrite); helpers grouped by concern (text vs recap).
+- [x] **Issue Lifecycle** — performed at merge: a `rad issue comment` recording patch ID + HEAD SHA, review/merge method, and node --test/--check + npm run lint outcomes precedes `rad issue state --solved 6115cc3`. Box checked once that comment + transition lands.
+
+### Verification Results
+.artifacts/test-pure-helpers/verification_matrix.md
+
+10 of 11 matrix subtasks PASS now: `node --test` 41 (40 pass / 0 fail / 1 documented-bug skip), `node --check` clean on bot+text+recap, grep confirms no dangling inline defs (only imports + call sites), `npm run lint` exit 0. The 11th (issue lifecycle) lands at merge. Three pre-existing timeframe-parser bugs surfaced by the new tests are documented for a follow-up issue (see flag to user), not fixed here.

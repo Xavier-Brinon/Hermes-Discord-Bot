@@ -8,14 +8,14 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const { execFile } = require('child_process');
 const path = require('path');
 const { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('./prompts');
+const { isNonArticleUrl, unwrapText, splitAtBoundaries } = require('./text');
+const { parseTimeframe } = require('./recap');
 
 // Hermes CLI path
 const HERMES_BIN = '/data/.local/bin/hermes';
 
-// Link detection
+// Link detection (NON_ARTICLE_PATTERN / isNonArticleUrl now live in text.js)
 const LINK_PATTERN = /https?:\/\/\S+/i;
-// URLs that are NOT articles — skip silently
-const NON_ARTICLE_PATTERN = /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|reddit\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
 const PROCESSED_MESSAGES = new Set();
 // Bound the dedup set so a long-lived process can't leak memory. Discord only
 // fires duplicate messageCreate events back-to-back, so a rolling window of
@@ -328,105 +328,15 @@ async function finalizeReaction(message, success) {
   }
 }
 
-// Unwrap terminal-formatted text: merge lines broken mid-sentence
-// Hermes outputs at ~80 chars regardless of prompt instructions
-function unwrapText(text) {
-  if (!text) return text;
-  const lines = text.split('\n');
-  const result = [];
-  let buffer = '';
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      // Empty line = paragraph break
-      if (buffer) { result.push(buffer); buffer = ''; }
-      result.push('');
-      continue;
-    }
-    // Structural markers = new paragraph
-    if (/^(📊|🔥|🔗|🤖|📌|❓|⚠️|##|THEME:|---$|[-\d]+[.)]\s)/.test(trimmed)) {
-      if (buffer) { result.push(buffer); buffer = ''; }
-      // THEME: and --- lines must stay standalone — don't merge summary into them
-      if (/^THEME:/i.test(trimmed) || trimmed === '---') {
-        result.push(trimmed);
-        // buffer stays empty so summary lines start fresh
-      } else {
-        buffer = trimmed;
-      }
-      continue;
-    }
-    // Merge: append to current paragraph
-    if (buffer) {
-      buffer += ' ' + trimmed;
-    } else {
-      buffer = trimmed;
-    }
-  }
-  if (buffer) result.push(buffer);
-
-  return result.join('\n');
-}
-
 // Function to format Hermes response (unwrap only, no truncation — caller handles splitting)
 function formatHermesResponse(response) {
   if (!response) return messagesFR.fallbackResponse;
   return unwrapText(response);
 }
 
-// Split a long response at logical boundaries and send via thread
-// Discord message limit is 2000 chars; we use 1900 to leave margin for formatting
+// Discord message limit is 2000 chars; we use 1900 to leave margin for formatting.
+// (splitAtBoundaries now lives in text.js and is imported above.)
 const DISCORD_MSG_LIMIT = 1900;
-
-function splitAtBoundaries(text, maxLen) {
-  const chunks = [];
-  const paragraphs = text.split('\n');
-  let current = '';
-
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
-    if (!trimmed) {
-      // Empty line = paragraph separator — flush current if non-empty
-      if (current) {
-        chunks.push(current.trim());
-        current = '';
-      }
-      continue;
-    }
-
-    const candidate = current ? current + '\n' + trimmed : trimmed;
-
-    if (candidate.length <= maxLen) {
-      current = candidate;
-    } else {
-      // Candidate too long — flush current, start new chunk
-      if (current) {
-        chunks.push(current.trim());
-      }
-      // If this single paragraph exceeds maxLen, hard-split it
-      if (trimmed.length > maxLen) {
-        let remaining = trimmed;
-        while (remaining.length > maxLen) {
-          // Try to split at last sentence boundary (., !, ?, :, ;) within limit
-          let cutAt = maxLen;
-          const lastPunct = remaining.lastIndexOf('.', maxLen);
-          if (lastPunct > maxLen * 0.6) cutAt = lastPunct + 1;
-          else {
-            const lastSpace = remaining.lastIndexOf(' ', maxLen);
-            if (lastSpace > maxLen * 0.6) cutAt = lastSpace;
-          }
-          chunks.push(remaining.substring(0, cutAt).trim());
-          remaining = remaining.substring(cutAt).trim();
-        }
-        current = remaining;
-      } else {
-        current = trimmed;
-      }
-    }
-  }
-  if (current) chunks.push(current.trim());
-  return chunks;
-}
 
 async function sendLongResponse(message, text) {
   if (text.length <= DISCORD_MSG_LIMIT) {
@@ -614,58 +524,9 @@ client.on('messageCreate', async message => {
         console.log('📜 History/recap request detected, fetching channel history...');
         await message.react('👀');
 
-        // Determine the timeframe
-        let daysBack = 7; // default: 1 week
-        let sinceTs = null, untilTs = null; // absolute timestamps for month-based requests
-        const now = new Date();
-
-        // French + English month names
-        const monthNames = {
-          'janvier':0,'février':0,'fevrier':0,'mars':2,'avril':3,'mai':4,'juin':5,
-          'juillet':6,'aout':7,'août':7,'septembre':8,'octobre':9,'novembre':10,
-          'décembre':11,'decembre':11,
-          'january':0,'february':1,'march':2,'april':3,'may':4,'june':5,
-          'july':6,'august':7,'september':8,'october':9,'november':10,'december':11
-        };
-
-        // "mois de mai", "mois d'avril", "month of may" → only that month
-        const monthMatch = content.match(/mois\s+(d['e]|de\s+)?(\w+)/i);
-        if (monthMatch && monthNames[monthMatch[2].toLowerCase()] !== undefined) {
-          const m = monthNames[monthMatch[2].toLowerCase()];
-          let year = now.getFullYear();
-          if (m > now.getMonth()) year--; // future month → last year
-          sinceTs = new Date(year, m, 1).getTime();
-          untilTs = new Date(year, m + 1, 0, 23, 59, 59, 999).getTime(); // last day of month
-        }
-        // "mois dernier", "last month" → only last month
-        else if (/mois\s+dernier|last\s+month/i.test(content)) {
-          const lastM = now.getMonth() - 1;
-          const year = lastM < 0 ? now.getFullYear() - 1 : now.getFullYear();
-          const m = lastM < 0 ? 11 : lastM;
-          sinceTs = new Date(year, m, 1).getTime();
-          untilTs = new Date(year, m + 1, 0, 23, 59, 59, 999).getTime();
-        }
-        // "semaine dernière", "last week"
-        else if (/semaine\s+dernière|dernière\s+semaine|last\s+week/i.test(content)) {
-          daysBack = 7;
-        }
-        // "hier", "yesterday"
-        else if (/\bhier\b|yesterday/i.test(content)) {
-          daysBack = 1;
-        }
-        // "aujourd'hui", "today"
-        else if (/\baujourd['e]hui\b|today/i.test(content)) {
-          daysBack = 1;
-        }
-        // Numeric: "3 jours", "2 semaines", "5 days", "3 weeks"
-        else {
-          const dayMatch = content.match(/(\d+)\s*(jours?|days?|semaines?|weeks?)/i);
-          if (dayMatch) {
-            const num = parseInt(dayMatch[1]);
-            const unit = dayMatch[2].toLowerCase();
-            daysBack = unit.startsWith('semaine') || unit.startsWith('week') ? num * 7 : num;
-          }
-        }
+        // Determine the timeframe — pure date-math lives in recap.js (parseTimeframe).
+        // Month requests set absolute sinceTs/untilTs; relative/numeric set daysBack.
+        const { daysBack, sinceTs, untilTs } = parseTimeframe(content, new Date());
 
         // Fetch messages for the requested timeframe
         let history;
@@ -812,7 +673,7 @@ client.on('messageCreate', async message => {
   const links = message.content.match(LINK_PATTERN);
   if (links && links.length > 0) {
     // Filter: only article-like URLs, skip videos/images/social media silently
-    const articleLinks = links.filter(l => !NON_ARTICLE_PATTERN.test(l));
+    const articleLinks = links.filter(l => !isNonArticleUrl(l));
     if (articleLinks.length === 0) return; // nothing to summarize, silently skip
 
     rememberMessage(message.id);
