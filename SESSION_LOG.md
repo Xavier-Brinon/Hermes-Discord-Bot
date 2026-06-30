@@ -392,3 +392,46 @@ PASSED. The split followed the issue's seams by relocating code faithfully: conf
 .artifacts/modularise-entrypoint/verification_matrix.md
 
 10 of 11 matrix subtasks PASS now: `node --check` clean on all 6 files; `node --test` 47 (46 pass / 0 fail / 1 documented-bug skip), including 6 new module-load tests (acyclic graph + exports + df0d693 env-override); `npm run lint` exit 0; messagesFR byte-identical to HEAD; entrypoint 748→386 with no dangling refs / orphan requires. The 11th (issue lifecycle, both issues) lands at merge. Live @mention/link/recap smoke test lands on the VPS redeploy (no automated handler tests exist).
+
+---
+
+# Task: global-error-handlers
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: 1ff433a — Add global error handlers (client error, unhandledRejection) and await replies
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will use one awaited `safeReply` helper + four event registrations (`client.on('error'/'shardError')`, `process.on('unhandledRejection'/'uncaughtException')`) that log and notify. I will NOT add a `withErrorHandling` decorator, `notifyAdmin` throttling, or `process.exit` on uncaught errors.
+- **Scope Boundaries:**
+  - In-scope: text.js (safeReply), hermes-discord-bot-clean.js (import + 4 reply conversions + 4 handlers), test/text.test.js (safeReply test)
+  - Out-of-scope: hermes-cli.js, recap.js, prompts.js, cache.js, config.js, sendLongResponse, manage_hermes.sh / watchdog (issue c226bf1)
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (change only the un-awaited replies; leave the already-awaited ones)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no catch-all error-handling abstraction accreting responsibilities)
+
+### Assumptions
+`.artifacts/global-error-handlers/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The final diff is exactly the Pre-Flight commitment: one awaited `safeReply` helper in text.js, four un-awaited replies converted to `await safeReply(...)`, and four event registrations (`client.on('error'/'shardError')` log-only, `process.on('unhandledRejection'/'uncaughtException')` log + notifyAdmin, no `process.exit`). No `withErrorHandling` decorator, no notifyAdmin throttle, no exit-on-uncaught — all on the Abstinence List. Solution ≈ 20 logical LOC against a 22 target (Delta −2, within budget). `npm test` 50/50 (2 new), `npm run lint` 0 errors.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — no abstractions beyond the helper + 4 handlers committed to in Pre-Flight
+- [ ] **Scope Bleed** — only text.js, hermes-discord-bot-clean.js, test/text.test.js changed; all on the Touch List
+- [ ] **Style Drift** — safeReply mirrors sendLongResponse (duck-typed message, console.error); handlers sit with existing client.on registrations
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved`, recording patch ID + merge SHA + verification (PENDING at write time, lands at merge)
+
+### Verification Results
+`.artifacts/global-error-handlers/verification_matrix.md`
+
+7 of 8 matrix subtasks PASS (both safeReply tests green; no fire-and-forget replies remain; 2 client handlers + 2 process handlers registered with 0 new process.exit; lint 0 errors; 50/50 tests). The 8th (issue lifecycle) is PENDING and lands at merge.
+

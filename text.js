@@ -117,6 +117,19 @@ function formatHermesResponse(response) {
   return unwrapText(response);
 }
 
+// Reply to a Discord message without letting a rejected reply escape as an unhandled
+// rejection (issue 1ff433a). message.reply can reject when the bot lacks Send-Messages
+// permission or the channel was deleted; such failures must be logged, not crash the
+// PM2-supervised process. Returns the sent message on success, null on failure.
+async function safeReply(message, content) {
+  try {
+    return await message.reply(content);
+  } catch (e) {
+    console.error('Reply failed:', e.message);
+    return null;
+  }
+}
+
 // Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
 // and post the chunks — directly in a thread, or in a new thread otherwise.
 async function sendLongResponse(message, text) {
@@ -153,5 +166,6 @@ module.exports = {
   unwrapText,
   splitAtBoundaries,
   formatHermesResponse,
+  safeReply,
   sendLongResponse,
 };

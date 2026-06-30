@@ -18,7 +18,7 @@ const {
   TIMEOUT_RECAP,
 } = require('./config');
 const { buildRecapPrompt, extractThemes } = require('./prompts');
-const { isNonArticleUrl, formatHermesResponse, sendLongResponse } = require('./text');
+const { isNonArticleUrl, formatHermesResponse, safeReply, sendLongResponse } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const { getSessionKey, getCachedLink, setCachedLink, getSessionId, setSessionId } = require('./cache');
 const { askHermes, summarizeLink } = require('./hermes-cli');
@@ -119,6 +119,25 @@ client.on('clientReady', () => {
   });
 });
 
+// --- Global error handlers (issue 1ff433a) ---
+// discord.js surfaces transient gateway/websocket errors here; log them so they aren't
+// silent. discord.js reconnects on its own, so we never exit on these.
+client.on('error', err => console.error('Discord client error:', err.message));
+client.on('shardError', err => console.error('Discord shard error:', err.message));
+
+// Last-resort nets: an unexpected rejection or throw is logged and reported to the admin
+// instead of taking the PM2-supervised process down (a needless restart is exactly what
+// this issue removes). notifyAdmin is self-guarding, so it can't re-trigger these handlers.
+process.on('unhandledRejection', reason => {
+  const detail = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
+  console.error('Unhandled rejection:', detail);
+  notifyAdmin('Rejet non géré', detail);
+});
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err.stack || err.message);
+  notifyAdmin('Exception non interceptée', err.stack || err.message);
+});
+
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
   if (PROCESSED_MESSAGES.has(message.id)) return;
@@ -145,7 +164,7 @@ client.on('messageCreate', async message => {
 
     if (!content) {
       const helpMessage = messagesFR.greeting.replace(/{botName}/g, client.user.username);
-      message.reply(helpMessage);
+      await safeReply(message, helpMessage);
       return;
     }
 
@@ -155,7 +174,7 @@ client.on('messageCreate', async message => {
       if (content.toLowerCase().includes('aide') || content.toLowerCase().includes('help')) {
         const helpMessage = messagesFR.helpTitle + "\n\n" +
                           messagesFR.helpContent.replace(/{botName}/g, client.user.username);
-        message.reply(helpMessage);
+        await safeReply(message, helpMessage);
         return;
       }
 
@@ -300,9 +319,9 @@ client.on('messageCreate', async message => {
       await finalizeReaction(message, false);
 
       if (error.message.includes("Hermes")) {
-        message.reply(messagesFR.hermesError);
+        await safeReply(message, messagesFR.hermesError);
       } else {
-        message.reply(messagesFR.error);
+        await safeReply(message, messagesFR.error);
       }
     }
     return;

@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { isNonArticleUrl, unwrapText, splitAtBoundaries } = require('../text');
+const { isNonArticleUrl, unwrapText, splitAtBoundaries, safeReply } = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
 
@@ -69,4 +69,25 @@ test('isNonArticleUrl — social / video / image URLs are non-articles', () => {
 
 test('isNonArticleUrl — a plain article URL is an article', () => {
   assert.equal(isNonArticleUrl('https://lemonde.fr/article/123'), false);
+});
+
+// --- safeReply ------------------------------------------------------------
+// Duck-typed message object (like sendLongResponse), no real Discord client (issue 1ff433a).
+
+test('safeReply — returns the sent message on success', async () => {
+  const sent = { id: 'sent-1' };
+  const message = { reply: async () => sent };
+  assert.equal(await safeReply(message, 'salut'), sent);
+});
+
+test('safeReply — swallows a rejected reply (returns null, does not throw)', async () => {
+  const message = { reply: async () => { throw new Error('Missing Permissions'); } };
+  // Silence the expected console.error so the test output stays clean.
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(await safeReply(message, 'salut'), null);
+  } finally {
+    console.error = original;
+  }
 });
