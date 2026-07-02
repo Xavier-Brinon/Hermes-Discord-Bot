@@ -67,8 +67,33 @@ test('isNonArticleUrl — social / video / image URLs are non-articles', () => {
   assert.equal(isNonArticleUrl('https://example.com/photo.jpg'), true);
 });
 
+test('isNonArticleUrl — music-streaming / song links are non-articles (bot stays silent)', () => {
+  // The incident URL: a Spotify track that the bot wrongly summarised.
+  assert.equal(
+    isNonArticleUrl(
+      'https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5?si=T2_CXWiFR9ylRM4JlrKUug'
+    ),
+    true
+  );
+  assert.equal(isNonArticleUrl('https://spotify.link/abc123'), true);
+  assert.equal(isNonArticleUrl('https://music.apple.com/fr/album/x/123'), true);
+  assert.equal(isNonArticleUrl('https://soundcloud.com/artist/track'), true);
+  assert.equal(isNonArticleUrl('https://www.deezer.com/track/123'), true);
+  assert.equal(isNonArticleUrl('https://artist.bandcamp.com/track/song'), true);
+  assert.equal(isNonArticleUrl('https://tidal.com/browse/track/123'), true);
+  assert.equal(isNonArticleUrl('https://music.amazon.fr/albums/ABC'), true);
+});
+
 test('isNonArticleUrl — a plain article URL is an article', () => {
   assert.equal(isNonArticleUrl('https://lemonde.fr/article/123'), false);
+});
+
+test('isNonArticleUrl — reddit posts are articles (NOT skipped — some are worth a summary)', () => {
+  assert.equal(
+    isNonArticleUrl('https://www.reddit.com/r/france/comments/abc123/titre_du_post/'),
+    false
+  );
+  assert.equal(isNonArticleUrl('https://old.reddit.com/r/programming/comments/xyz/'), false);
 });
 
 // --- safeReply ------------------------------------------------------------
@@ -81,7 +106,11 @@ test('safeReply — returns the sent message on success', async () => {
 });
 
 test('safeReply — swallows a rejected reply (returns null, does not throw)', async () => {
-  const message = { reply: async () => { throw new Error('Missing Permissions'); } };
+  const message = {
+    reply: async () => {
+      throw new Error('Missing Permissions');
+    },
+  };
   // Silence the expected console.error so the test output stays clean.
   const original = console.error;
   console.error = () => {};

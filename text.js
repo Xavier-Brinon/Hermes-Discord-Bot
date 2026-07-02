@@ -10,7 +10,16 @@
 const { messagesFR, DISCORD_MSG_LIMIT } = require('./config');
 
 // URLs that are NOT articles — skip silently (used to filter auto link-summaries).
-const NON_ARTICLE_PATTERN = /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|reddit\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
+// Covers social/video/image hosts, raw media files, and music-streaming/player links
+// (Spotify, Apple Music, SoundCloud, Deezer, Bandcamp, Tidal, Amazon Music, Audiomack).
+// A song is not an article: a Spotify track page is a JS app with no readable body, so
+// summarising one made Hermes hallucinate a made-up track. Skip these like any other
+// media link — the bot stays silent.
+// Reddit is deliberately NOT skipped: post pages ship real text (server HTML + OG tags),
+// and some threads are worth a summary. Image/video-only posts are handled downstream by
+// the content-aware abstain gate (issue 6b1af90), not by blanket-blacklisting the host.
+const NON_ARTICLE_PATTERN =
+  /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|spotify\.(com|link)|music\.apple\.com|soundcloud\.com|deezer\.com|deezer\.page\.link|bandcamp\.com|tidal\.com|music\.amazon\.|audiomack\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
 
 // True when a URL is a non-article (social/media/image) link the bot should not summarise.
 function isNonArticleUrl(url) {
@@ -29,13 +38,19 @@ function unwrapText(text) {
     const trimmed = line.trim();
     if (!trimmed) {
       // Empty line = paragraph break
-      if (buffer) { result.push(buffer); buffer = ''; }
+      if (buffer) {
+        result.push(buffer);
+        buffer = '';
+      }
       result.push('');
       continue;
     }
     // Structural markers = new paragraph
     if (/^(📊|🔥|🔗|🤖|📌|❓|⚠️|##|THEME:|---$|[-\d]+[.)]\s)/.test(trimmed)) {
-      if (buffer) { result.push(buffer); buffer = ''; }
+      if (buffer) {
+        result.push(buffer);
+        buffer = '';
+      }
       // THEME: and --- lines must stay standalone — don't merge summary into them
       if (/^THEME:/i.test(trimmed) || trimmed === '---') {
         result.push(trimmed);
@@ -152,7 +167,7 @@ async function sendLongResponse(message, text) {
   // Create a thread and post chunks
   const thread = await message.startThread({
     name: '📄 Réponse détaillée',
-    autoArchiveDuration: 60
+    autoArchiveDuration: 60,
   });
 
   for (const chunk of chunks) {

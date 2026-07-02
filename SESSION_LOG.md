@@ -435,3 +435,43 @@ PASSED. The final diff is exactly the Pre-Flight commitment: one awaited `safeRe
 
 7 of 8 matrix subtasks PASS (both safeReply tests green; no fire-and-forget replies remain; 2 client handlers + 2 process handlers registered with 0 new process.exit; lint 0 errors; 50/50 tests). The 8th (issue lifecycle) is PENDING and lands at merge.
 
+# Task: music-streaming-skip
+complexity_score: 2
+complexity_tier: TRIVIAL
+
+Radicle issue: e89a541 — Music-streaming/song links summarised as articles — bot must skip them silently
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Extend the existing `NON_ARTICLE_PATTERN` regex (text.js) with music-streaming/player hosts so song links take the same silent-skip branch as YouTube/images. I will NOT add a second predicate, a config knob, or touch `summarizeLink`/`buildLinkPrompt` (the content-aware abstain gate is issue 6b1af90).
+- **Scope Boundaries:**
+  - In-scope: text.js (`NON_ARTICLE_PATTERN` + doc comment), test/text.test.js (skip-list test)
+  - Out-of-scope: hermes-cli.js, prompts.js, hermes-discord-bot-clean.js, config.js — no classification change needed at the call site
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (edit only the pattern; leave the classifier, its call site, and the summary path untouched)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no new "media policy" abstraction — one denylist, edited in place)
+
+### Assumptions
+`.artifacts/music-streaming-skip/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff is the Pre-Flight commitment plus one user-requested addition landed mid-task: remove `reddit\.com` from the same regex so reddit posts (real server text, worth summarising) reach the summariser. Both edits are the one `NON_ARTICLE_PATTERN` line + the one test file. No second predicate, no config knob, `summarizeLink`/`buildLinkPrompt` untouched (issue 6b1af90). The reddit scope expansion is recorded as a comment on e89a541 (comment a5e57d4).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one regex edited in place; no abstraction added
+- [ ] **Scope Bleed** — only text.js + test/text.test.js (source) changed; reddit removal folded into the same regex per user request, documented on the issue
+- [ ] **Style Drift** — new hosts follow the existing alternation style; prettier reformatted 3 pre-existing one-liners (drift the repo's own check already flagged), no logic change
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved`, recording patch ID + merge SHA + verification (PENDING at write time, lands at merge)
+
+### Verification Results
+`.artifacts/music-streaming-skip/verification_matrix.md`
+
+6 of 7 matrix subtasks PASS (incident Spotify URL → non-article; 8 music hosts → all non-article; lemonde.fr article → article; reddit posts www+old → article; npm test 52/52; lint 0 errors, 4 pre-existing warnings untouched; prettier clean). The 7th (issue lifecycle) is PENDING and lands at merge.
+
