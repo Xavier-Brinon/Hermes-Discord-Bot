@@ -515,3 +515,45 @@ PASSED. Final diff matches the Pre-Flight commitment: `buildSummaryFormat()` add
 
 7 of 8 matrix subtasks PASS (plain Q&A byte-identical; summarize appends the format; buildLinkPrompt embeds it; adaptive markers present; hasLinkStructure re-keyed true/false; entrypoint wiring at lines 315/316/326; npm test 56/56; lint 0 errors; prettier clean on changed JS). The 8th (issue lifecycle) is PENDING and lands at merge.
 
+# Task: strip-reading-progress
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: c0003a51 — Strip Hermes tool-progress lines (📄/📖 Reading …) leaking into bot replies past -Q
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will add ONE narrow line-filter (`/^\s*(?:📄|📖) Reading /u`) on the `stdout.split('\n')` inside `parseHermesOutput`, dropping the two Hermes trace forms (`📄 Reading <url>`, `📖 Reading <file> L<range>`). I will NOT add a tool-progress abstraction, a leading-only skip branch, a config knob, or touch the hermes-cli.js call sites (they inherit the fix).
+- **Scope Boundaries:**
+  - In-scope: prompts.js (parseHermesOutput), test/prompts.test.js
+  - Out-of-scope: hermes-cli.js (both call sites inherit via the return value), text.js (`📄 Réponse détaillée` is a Discord embed field, not trace), the prompt builders
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (change only the parser line the bug needs; mirror the existing narrow ⚠/clarify strip discipline)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no "tool-progress sanitiser" object accreting every future -Q leak — one filter for the one shape that leaks today)
+
+### Assumptions
+`.artifacts/strip-reading-progress/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The final diff matches the Pre-Flight commitment exactly: one named regex (`READING_TRACE`) plus a `.filter` on `stdout.split('\n')` inside `parseHermesOutput` — 3 logical LOC, under the 4-line budget. No tool-progress abstraction, no leading-only branch, no config knob; the hermes-cli.js call sites and text.js were left untouched and inherit the fix through the return value. Line-wise (not leading-only) was chosen deliberately so an interleaved trace line is also stripped — verified by a dedicated test.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one filter for the one trace shape that leaks today; the "unify the three -Q strippers" idea was logged as an Orthogonal Issue, not built
+- [ ] **Scope Bleed** — only the 2 declared files changed (prompts.js, test/prompts.test.js); no drive-by edits
+- [ ] **Style Drift** — mirrors the existing narrow ⚠/clarify strip idiom; eslint 0 errors, prettier clean on both changed files
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification + the "redeploy alone won't fix" finding); PENDING at write time, lands at merge
+
+### Verification Results
+`.artifacts/strip-reading-progress/verification_matrix.md`
+
+5 of 6 matrix subtasks PASS: leading trace lines stripped to the answer only; an interleaved trace line stripped (line-wise); a real answer that leads with 📖 or mentions "reading" left byte-identical; the ⚠/clarify/session-id contracts still hold (combined-leak spot check yields the clean answer + preserved id); `npm test` 59/59, eslint 0 errors, prettier clean. The 6th (issue lifecycle) is PENDING and lands at merge.
+
+Finding for the issue's 4th acceptance criterion: **a prod redeploy alone would NOT fix this.** `parseHermesOutput` has never stripped 📄/📖 lines in any build (confirmed by reading current source + `git log 51d38dc..HEAD -- prompts.js`, which shows only summary-format + recap-context-file touched it). The code change is required.
+

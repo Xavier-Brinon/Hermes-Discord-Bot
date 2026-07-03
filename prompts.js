@@ -96,7 +96,16 @@ function extractThemes(rawResponse) {
 // before the response. Returns { response, sessionId }. Replaces the old
 // banner-scraping loops + extractSessionId(stdout). See issue 9864045.
 function parseHermesOutput(stdout, stderr) {
-  const lines = String(stdout || '').split('\n');
+  // Drop Hermes tool-progress narration that leaks past -Q: the fetch/read trace
+  // lines `📄 Reading <url>` and `📖 Reading <file> L<range>`. Filtered line-wise
+  // (not leading-only) so a trace line survives even if a second fetch interleaves
+  // after the answer starts. The emoji + English "Reading " prefix is specific
+  // enough that a real French answer — even one mentioning "reading" or opening
+  // with an emoji — is untouched. See issue c0003a51.
+  const READING_TRACE = /^\s*(?:📄|📖) Reading /u;
+  const lines = String(stdout || '')
+    .split('\n')
+    .filter((line) => !READING_TRACE.test(line));
   let i = 0;
   // Skip leading blanks and leaked CLI diagnostics: a bare `⚠` (U+26A0) NOT
   // followed by the emoji variation selector — so a real `⚠️` answer survives.
