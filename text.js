@@ -26,6 +26,16 @@ function isNonArticleUrl(url) {
   return NON_ARTICLE_PATTERN.test(url);
 }
 
+// True when the user directly @mentioned `userId` in the message TEXT — i.e. typed
+// @Bot, so its `<@id>` / `<@!id>` token is in the content (the same token the handler
+// strips). Deliberately content-only: unlike discord.js's message.mentions.has(),
+// which by default also returns true for @everyone/@here, a role the bot holds, and
+// every reply to the bot's own message, this counts ONLY a real @mention — so the bot
+// stops answering every reply and every @everyone. See issue f482c08.
+function mentionsUser(content, userId) {
+  return new RegExp(`<@!?${userId}>`).test(content || '');
+}
+
 // Unwrap terminal-formatted text: merge lines broken mid-sentence
 // Hermes outputs at ~80 chars regardless of prompt instructions
 function unwrapText(text) {
@@ -178,6 +188,7 @@ async function sendLongResponse(message, text) {
 module.exports = {
   NON_ARTICLE_PATTERN,
   isNonArticleUrl,
+  mentionsUser,
   unwrapText,
   splitAtBoundaries,
   formatHermesResponse,

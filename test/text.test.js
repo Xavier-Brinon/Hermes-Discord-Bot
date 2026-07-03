@@ -5,7 +5,13 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { isNonArticleUrl, unwrapText, splitAtBoundaries, safeReply } = require('../text');
+const {
+  isNonArticleUrl,
+  mentionsUser,
+  unwrapText,
+  splitAtBoundaries,
+  safeReply,
+} = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
 
@@ -94,6 +100,44 @@ test('isNonArticleUrl — reddit posts are articles (NOT skipped — some are wo
     false
   );
   assert.equal(isNonArticleUrl('https://old.reddit.com/r/programming/comments/xyz/'), false);
+});
+
+// --- mentionsUser ---------------------------------------------------------
+// Gate for the Q&A path: only a real @mention in the message text counts, NOT
+// @everyone/@here, a role the bot holds, or a reply to the bot (issue f482c08).
+
+const BOT_ID = '123456789012345678';
+
+test('mentionsUser — true for a direct <@id> mention', () => {
+  assert.equal(mentionsUser(`salut <@${BOT_ID}> ça va ?`, BOT_ID), true);
+});
+
+test('mentionsUser — true for the <@!id> nickname form', () => {
+  assert.equal(mentionsUser(`<@!${BOT_ID}> résume ce lien`, BOT_ID), true);
+});
+
+test('mentionsUser — false for a plain sentence (no token → the reported bug)', () => {
+  assert.equal(mentionsUser('je pense que la grève est justifiée', BOT_ID), false);
+});
+
+test('mentionsUser — false for @everyone/@here (no bot token in content)', () => {
+  assert.equal(mentionsUser('@everyone réunion à 15h', BOT_ID), false);
+  assert.equal(mentionsUser('@here on commence', BOT_ID), false);
+});
+
+test('mentionsUser — false for a mention of a DIFFERENT user', () => {
+  assert.equal(mentionsUser('<@987654321098765432> tu en penses quoi ?', BOT_ID), false);
+});
+
+test('mentionsUser — false when the bot id is a substring of a longer id (> anchor)', () => {
+  // A different user whose id starts with the bot's id must NOT match.
+  assert.equal(mentionsUser(`<@${BOT_ID}0>`, BOT_ID), false);
+});
+
+test('mentionsUser — false/no-throw on empty or missing content', () => {
+  assert.equal(mentionsUser('', BOT_ID), false);
+  assert.equal(mentionsUser(null, BOT_ID), false);
+  assert.equal(mentionsUser(undefined, BOT_ID), false);
 });
 
 // --- safeReply ------------------------------------------------------------

@@ -557,3 +557,43 @@ PASSED. The final diff matches the Pre-Flight commitment exactly: one named rege
 
 Finding for the issue's 4th acceptance criterion: **a prod redeploy alone would NOT fix this.** `parseHermesOutput` has never stripped 📄/📖 lines in any build (confirmed by reading current source + `git log 51d38dc..HEAD -- prompts.js`, which shows only summary-format + recap-context-file touched it). The code change is required.
 
+# Task: mention-gate
+complexity_score: 4
+complexity_tier: STANDARD
+
+Radicle issue: f482c08 — Bot replies to non-mentions: mentions.has() counts @everyone / roles / reply-to-bot as a mention
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Add ONE pure helper `mentionsUser(content, userId)` to text.js that tests for the bot's typed `<@id>`/`<@!id>` token, and use it in place of `message.mentions.has(client.user.id)` at the gate. I will NOT add a mention-parser module, a config knob, or a reply-continuation feature; I will NOT touch the entrypoint mention-STRIP loop, recap/prompts/hermes-cli/cache/config, or the auto-link path.
+- **Scope Boundaries:**
+  - In-scope: text.js, hermes-discord-bot-clean.js (the gate line + import), test/text.test.js
+  - Out-of-scope: entrypoint strip loop (178-182), recap.js/prompts.js/hermes-cli.js/cache.js/config.js, auto-link path
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (fix the gate the bug is in; reuse the existing `<@!?id>` token definition rather than discord.js's over-eager has())
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no Discord-utils/mention-parser object — one 1-line predicate)
+
+### Assumptions
+`.artifacts/mention-gate/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: a pure `mentionsUser` helper (2 logical LOC) replaces `message.mentions.has()` at the gate; @everyone/@here, role pings, and replies-to-the-bot no longer count as a mention, while genuine @mentions and DMs are unaffected. No module, no config knob, no reply-continuation feature; the strip loop and all other modules untouched. Root cause was confirmed from the installed discord.js `MessageMentions.has()` source (everyone/repliedUser/roles counted by default) before coding.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one 1-line predicate + a rewired assignment; reply-continuation deliberately abstained (logged as a product decision, not built)
+- [ ] **Scope Bleed** — only the 3 declared source/test files changed; strip loop + other modules untouched. Prettier normalised ONLY my added lines (import wraps), no whole-file reformat
+- [ ] **Style Drift** — helper mirrors the pure-classifier style of `isNonArticleUrl`; eslint 0 errors (4 pre-existing warnings untouched); prettier clean on changed JS
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge
+
+### Verification Results
+`.artifacts/mention-gate/verification_matrix.md`
+
+9 of 10 matrix subtasks PASS: plain sentence / @everyone / @here / other-user / substring-id / empty-input all → false (no trigger); genuine `<@id>` and `<@!id>` → true (still triggers); reply-to-bot is false by construction (content-only helper, no token in a reply); DMs unaffected (gate is `isMentioned || isDirectMessage`, only isMentioned changed); npm test 66/66, eslint 0 errors, prettier clean. The 10th (issue lifecycle) is PENDING and lands at merge.
+

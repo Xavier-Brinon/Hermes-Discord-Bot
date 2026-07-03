@@ -18,7 +18,13 @@ const {
   TIMEOUT_RECAP,
 } = require('./config');
 const { buildRecapPrompt, extractThemes } = require('./prompts');
-const { isNonArticleUrl, formatHermesResponse, safeReply, sendLongResponse } = require('./text');
+const {
+  isNonArticleUrl,
+  mentionsUser,
+  formatHermesResponse,
+  safeReply,
+  sendLongResponse,
+} = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const {
   getSessionKey,
@@ -152,7 +158,10 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (PROCESSED_MESSAGES.has(message.id)) return;
 
-  const isMentioned = message.mentions.has(client.user.id);
+  // A real @mention only — NOT @everyone/@here, a role the bot holds, or a reply to
+  // the bot's message (message.mentions.has() counts all three, which made the bot
+  // answer every reply and every @everyone). See issue f482c08.
+  const isMentioned = mentionsUser(message.content, client.user.id);
   const isDirectMessage = message.channel.type === 'DM';
 
   // --- Server restriction ---
