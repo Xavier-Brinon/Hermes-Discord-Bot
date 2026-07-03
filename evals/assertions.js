@@ -16,9 +16,13 @@ function countQuestions(text) {
   return (text.match(/\?/g) || []).length;
 }
 
-// Link-summary structure: a 📌 résumé marker and a ❓ questions marker.
+// Link-summary structure (see prompts.js buildSummaryFormat): an adaptive thesis
+// header ("Thèse centrale" or "Idée principale") plus a "Questions" section.
 function hasLinkStructure(text) {
-  return text.includes('📌') && text.includes('❓');
+  if (!text) return false;
+  const hasThesis = /Thèse centrale|Idée principale/.test(text);
+  const hasQuestions = /Questions/.test(text);
+  return hasThesis && hasQuestions;
 }
 
 // Recap compliance against the prompt's contract. Conservative: runs extractThemes
@@ -26,7 +30,10 @@ function hasLinkStructure(text) {
 // live bot, which applies unwrapText first. Full parity arrives with issue dcdec9e.
 function recapCompliance(output) {
   const themes = extractThemes(output);
-  const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = output
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
   return {
     themes,
     themeCount: themes.length,

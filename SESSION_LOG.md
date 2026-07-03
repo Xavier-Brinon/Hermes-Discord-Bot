@@ -475,3 +475,43 @@ PASSED. Final diff is the Pre-Flight commitment plus one user-requested addition
 
 6 of 7 matrix subtasks PASS (incident Spotify URL → non-article; 8 music hosts → all non-article; lemonde.fr article → article; reddit posts www+old → article; npm test 52/52; lint 0 errors, 4 pre-existing warnings untouched; prettier clean). The 7th (issue lifecycle) is PENDING and lands at merge.
 
+# Task: summary-format
+complexity_score: 5
+complexity_tier: STANDARD
+
+Radicle issue: ec634229 — Structured summary format: adaptive Thèse/Idée one-shot for link + @mention summaries
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One shared `buildSummaryFormat()` in prompts.js (adaptive Thèse/Idée + Arguments/Points + Questions), reused by `buildLinkPrompt` and by `buildAskPrompt` behind a `summarize` flag; the @mention path sets `summarize = LINK_PATTERN.test(content)`. I will NOT add a summary module, an intent classifier, or a config knob, and I will NOT touch `buildAskPromptWithContextFile` or general Q&A.
+- **Scope Boundaries:**
+  - In-scope: prompts.js, hermes-cli.js, hermes-discord-bot-clean.js, test/prompts.test.js, evals/assertions.js, CONTEXT.md, hermes-discord-bot.md
+  - Out-of-scope: buildAskPromptWithContextFile (recap/offload path), summarizeLink (already calls buildLinkPrompt), config.js/text.js/cache.js/recap.js
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (add one shared function + a flag; leave general Q&A byte-identical)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no SummaryFormatter class / policy object — one function)
+
+### Assumptions
+`.artifacts/summary-format/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: `buildSummaryFormat()` added and reused by both summary paths; `buildAskPrompt` gains a `summarize` flag (default false → plain Q&A byte-identical, verified); the @mention path derives `wantsSummary` from URL-presence and enables web tools. No summary module, no classifier, no config knob; buildAskPromptWithContextFile and general Q&A untouched. User pre-approved the full "both paths, adaptive" scope.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — format in one shared function; no abstraction beyond it
+- [ ] **Scope Bleed** — only the 7 declared source/doc files changed; recap/offload path and Q&A untouched
+- [ ] **Style Drift** — prompt builders follow existing style; prettier normalised pre-existing JS drift (kept, per precedent); Markdown drift is pre-existing + ungated, docs left surgical
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge
+
+### Verification Results
+`.artifacts/summary-format/verification_matrix.md`
+
+7 of 8 matrix subtasks PASS (plain Q&A byte-identical; summarize appends the format; buildLinkPrompt embeds it; adaptive markers present; hasLinkStructure re-keyed true/false; entrypoint wiring at lines 315/316/326; npm test 56/56; lint 0 errors; prettier clean on changed JS). The 8th (issue lifecycle) is PENDING and lands at merge.
+

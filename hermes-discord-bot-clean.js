@@ -20,7 +20,13 @@ const {
 const { buildRecapPrompt, extractThemes } = require('./prompts');
 const { isNonArticleUrl, formatHermesResponse, safeReply, sendLongResponse } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
-const { getSessionKey, getCachedLink, setCachedLink, getSessionId, setSessionId } = require('./cache');
+const {
+  getSessionKey,
+  getCachedLink,
+  setCachedLink,
+  getSessionId,
+  setSessionId,
+} = require('./cache');
 const { askHermes, summarizeLink } = require('./hermes-cli');
 
 // Bound the dedup set so a long-lived process can't leak memory. Discord only fires
@@ -38,7 +44,9 @@ function rememberMessage(id) {
 
 // Server restriction is required — refuse to start without it.
 if (!ALLOWED_GUILD_ID) {
-  console.error('❌ ALLOWED_GUILD_ID is required. Set it in .env to restrict the bot to one server.');
+  console.error(
+    '❌ ALLOWED_GUILD_ID is required. Set it in .env to restrict the bot to one server.'
+  );
   process.exit(1);
 }
 console.log(`🔒 Restreint au serveur ID: ${ALLOWED_GUILD_ID}`);
@@ -70,7 +78,9 @@ async function notifyAdmin(errorType, details) {
 function getDecryptedToken() {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) {
-    console.error('DISCORD_BOT_TOKEN not found in environment. Did you launch with npx dotenvx run?');
+    console.error(
+      'DISCORD_BOT_TOKEN not found in environment. Did you launch with npx dotenvx run?'
+    );
     process.exit(1);
   }
   return token;
@@ -82,9 +92,9 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages
+    GatewayIntentBits.DirectMessages,
   ],
-  partials: ['CHANNEL']
+  partials: ['CHANNEL'],
 });
 
 // Get the token from environment
@@ -114,7 +124,7 @@ client.on('clientReady', () => {
 
   // Log all guilds the bot is in (for server restriction setup)
   console.log(`🏠 Serveurs connectés (${client.guilds.cache.size}):`);
-  client.guilds.cache.forEach(guild => {
+  client.guilds.cache.forEach((guild) => {
     console.log(`   - ${guild.name} (ID: ${guild.id})`);
   });
 });
@@ -122,23 +132,23 @@ client.on('clientReady', () => {
 // --- Global error handlers (issue 1ff433a) ---
 // discord.js surfaces transient gateway/websocket errors here; log them so they aren't
 // silent. discord.js reconnects on its own, so we never exit on these.
-client.on('error', err => console.error('Discord client error:', err.message));
-client.on('shardError', err => console.error('Discord shard error:', err.message));
+client.on('error', (err) => console.error('Discord client error:', err.message));
+client.on('shardError', (err) => console.error('Discord shard error:', err.message));
 
 // Last-resort nets: an unexpected rejection or throw is logged and reported to the admin
 // instead of taking the PM2-supervised process down (a needless restart is exactly what
 // this issue removes). notifyAdmin is self-guarding, so it can't re-trigger these handlers.
-process.on('unhandledRejection', reason => {
-  const detail = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
+process.on('unhandledRejection', (reason) => {
+  const detail = reason instanceof Error ? reason.stack || reason.message : String(reason);
   console.error('Unhandled rejection:', detail);
   notifyAdmin('Rejet non géré', detail);
 });
-process.on('uncaughtException', err => {
+process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err.stack || err.message);
   notifyAdmin('Exception non interceptée', err.stack || err.message);
 });
 
-client.on('messageCreate', async message => {
+client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (PROCESSED_MESSAGES.has(message.id)) return;
 
@@ -156,7 +166,7 @@ client.on('messageCreate', async message => {
     rememberMessage(message.id);
     let content = message.content;
 
-    message.mentions.users.forEach(user => {
+    message.mentions.users.forEach((user) => {
       content = content.replace(new RegExp(`<@!?${user.id}>`, 'g'), '').trim();
     });
 
@@ -172,8 +182,10 @@ client.on('messageCreate', async message => {
 
     try {
       if (content.toLowerCase().includes('aide') || content.toLowerCase().includes('help')) {
-        const helpMessage = messagesFR.helpTitle + "\n\n" +
-                          messagesFR.helpContent.replace(/{botName}/g, client.user.username);
+        const helpMessage =
+          messagesFR.helpTitle +
+          '\n\n' +
+          messagesFR.helpContent.replace(/{botName}/g, client.user.username);
         await safeReply(message, helpMessage);
         return;
       }
@@ -195,7 +207,9 @@ client.on('messageCreate', async message => {
           history = await fetchChannelHistory(message.channel, { daysBack });
           // If too few messages, extend up to 30 days (only for relative timeframes)
           if (history.length < 10 && daysBack < 30) {
-            console.log(`📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`);
+            console.log(
+              `📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`
+            );
             history = await fetchChannelHistory(message.channel, { daysBack: 30 });
           }
         }
@@ -209,7 +223,7 @@ client.on('messageCreate', async message => {
         }
 
         // Send ALL non-bot messages as context (full content, no analytics)
-        const nonBotMessages = history.filter(m => !m.isBot);
+        const nonBotMessages = history.filter((m) => !m.isBot);
         // Use the requested timeframe boundaries for the header
         const firstDate = sinceTs
           ? new Date(sinceTs).toISOString().split('T')[0]
@@ -226,14 +240,19 @@ client.on('messageCreate', async message => {
         const recapPrompt = buildRecapPrompt();
 
         // Ask Hermes for the recap (no web tools needed)
-        const { response: recapResponse } = await askHermes(recapPrompt, { extraContext: context, customTimeout: TIMEOUT_RECAP });
+        const { response: recapResponse } = await askHermes(recapPrompt, {
+          extraContext: context,
+          customTimeout: TIMEOUT_RECAP,
+        });
         const rawResponse = formatHermesResponse(recapResponse);
 
         // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
         const themes = extractThemes(rawResponse);
 
         if (themes.length === 0) {
-          await message.reply("🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue.");
+          await message.reply(
+            "🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue."
+          );
           await finalizeReaction(message, false);
           return;
         }
@@ -241,7 +260,9 @@ client.on('messageCreate', async message => {
         // Post themes: if already in a thread, post directly; otherwise create one
         if (message.channel.isThread()) {
           console.log(`📊 Already in thread ${message.channel.id}, posting themes directly`);
-          await message.channel.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
+          await message.channel.send(
+            `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
+          );
           for (const theme of themes) {
             await message.channel.send(`**${theme}**`);
           }
@@ -249,10 +270,12 @@ client.on('messageCreate', async message => {
           console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
           const thread = await message.startThread({
             name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
-            autoArchiveDuration: 60
+            autoArchiveDuration: 60,
           });
           console.log(`📊 Thread created: ${thread.id}`);
-          await thread.send(`**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`);
+          await thread.send(
+            `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
+          );
           for (const theme of themes) {
             await thread.send(`**${theme}**`);
           }
@@ -275,7 +298,7 @@ client.on('messageCreate', async message => {
         const recentLinks = await scanChannelForLinks(message.channel);
         if (recentLinks.length > 0) {
           lastLink = recentLinks[0].url;
-          extraContext = `Liens récents trouvés dans ce canal :\n${recentLinks.map(l => `- ${l.url} (posté par ${l.author})`).join('\n')}`;
+          extraContext = `Liens récents trouvés dans ce canal :\n${recentLinks.map((l) => `- ${l.url} (posté par ${l.author})`).join('\n')}`;
           useWeb = true;
           console.log(`📎 Found ${recentLinks.length} recent link(s) in channel`);
         }
@@ -284,11 +307,24 @@ client.on('messageCreate', async message => {
         useWeb = true;
       }
 
+      // Summary intent: the user @mentioned the bot with a link in the message. Apply the
+      // shared structured-summary format (buildSummaryFormat) and enable web tools so
+      // Hermes fetches the page. Only a URL in the message triggers this — a plain question
+      // stays normal Q&A, so the format never leaks onto "quel temps fait-il ?". Trade-off:
+      // a pointed question that also carries a URL is treated as a summary (issue ec634229).
+      const wantsSummary = LINK_PATTERN.test(content);
+      if (wantsSummary) useWeb = true;
+
       // Get session key and resume previous conversation if available
       const sessionKey = getSessionKey(message);
       const previousSessionId = getSessionId(sessionKey);
 
-      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, { extraContext, useWebTools: useWeb, sessionId: previousSessionId });
+      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, {
+        extraContext,
+        useWebTools: useWeb,
+        sessionId: previousSessionId,
+        summarize: wantsSummary,
+      });
       const formattedResponse = formatHermesResponse(hermesResponse);
 
       // Save session ID for next follow-up in this channel/thread
@@ -298,7 +334,6 @@ client.on('messageCreate', async message => {
 
       await sendLongResponse(message, formattedResponse);
       await finalizeReaction(message, true);
-
     } catch (error) {
       console.error('Error:', error);
 
@@ -312,13 +347,15 @@ client.on('messageCreate', async message => {
         `Lien: ${message.url}`,
         error.cliStdout ? `Sortie LLM: ${error.cliStdout.trim()}` : null,
         `Temps: ${error.elapsed || '?'}s`,
-        `Erreur: ${error.cliStderr || error.message}`
-      ].filter(Boolean).join('\n');
+        `Erreur: ${error.cliStderr || error.message}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
       notifyAdmin('Question échouée', details);
 
       await finalizeReaction(message, false);
 
-      if (error.message.includes("Hermes")) {
+      if (error.message.includes('Hermes')) {
         await safeReply(message, messagesFR.hermesError);
       } else {
         await safeReply(message, messagesFR.error);
@@ -331,7 +368,7 @@ client.on('messageCreate', async message => {
   const links = message.content.match(LINK_PATTERN);
   if (links && links.length > 0) {
     // Filter: only article-like URLs, skip videos/images/social media silently
-    const articleLinks = links.filter(l => !isNonArticleUrl(l));
+    const articleLinks = links.filter((l) => !isNonArticleUrl(l));
     if (articleLinks.length === 0) return; // nothing to summarize, silently skip
 
     rememberMessage(message.id);
@@ -340,7 +377,9 @@ client.on('messageCreate', async message => {
     let pendingMsg;
     try {
       await message.react('👀');
-      pendingMsg = await message.reply("🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…");
+      pendingMsg = await message.reply(
+        "🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…"
+      );
 
       // Summarize each article link (up to 3)
       const linksToProcess = articleLinks.slice(0, 3);
@@ -364,18 +403,21 @@ client.on('messageCreate', async message => {
       setCachedLink(message.channel.id, linksToProcess[0]);
 
       await finalizeReaction(message, true);
-
     } catch (error) {
       console.error('Link summary error:', error);
 
       // Silently fail: delete pending message, remove 👀, DM admin only
       if (pendingMsg) {
-        try { await pendingMsg.delete(); } catch (_) {}
+        try {
+          await pendingMsg.delete();
+        } catch (_) {}
       }
       try {
-        const botReactions = message.reactions.cache.filter(r => r.me);
+        const botReactions = message.reactions.cache.filter((r) => r.me);
         for (const [, reaction] of botReactions) {
-          try { await reaction.users.remove(client.user.id); } catch (_) {}
+          try {
+            await reaction.users.remove(client.user.id);
+          } catch (_) {}
         }
       } catch (_) {}
 
@@ -389,8 +431,10 @@ client.on('messageCreate', async message => {
         `Lien message: ${message.url}`,
         error.cliStdout ? `Sortie LLM: ${error.cliStdout.trim()}` : null,
         `Temps: ${error.elapsed || '?'}s`,
-        `Erreur: ${error.cliStderr || error.message}`
-      ].filter(Boolean).join('\n');
+        `Erreur: ${error.cliStderr || error.message}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
       notifyAdmin('Résumé de lien échoué', details);
     }
   }
@@ -400,7 +444,7 @@ client.on('messageCreate', async message => {
 console.log('🚀 Démarrage du bot Discord Hermes...');
 console.log('Token (10 premiers caractères):', token.substring(0, 10) + '...');
 
-client.login(token).catch(err => {
+client.login(token).catch((err) => {
   console.error('❌ Erreur lors du démarrage du bot Discord:', err);
   process.exit(1);
 });

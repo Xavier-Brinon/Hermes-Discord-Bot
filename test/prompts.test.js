@@ -8,7 +8,15 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput } = require('../prompts');
+const {
+  buildAskPrompt,
+  buildAskPromptWithContextFile,
+  buildLinkPrompt,
+  buildSummaryFormat,
+  buildRecapPrompt,
+  extractThemes,
+  parseHermesOutput,
+} = require('../prompts');
 
 test('buildAskPrompt — no context — byte-identical to former inline literal', () => {
   const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
@@ -22,7 +30,10 @@ test('buildAskPrompt — with context — prepends "Contexte :" + blank line', (
 
 test('buildAskPromptWithContextFile — byte-identical literal with @file: ref', () => {
   const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Résume le canal\n\nLe contexte de la conversation est fourni en pièce jointe. @file:.hermes-recap-ctx-1.txt`;
-  assert.equal(buildAskPromptWithContextFile('Résume le canal', '.hermes-recap-ctx-1.txt'), expected);
+  assert.equal(
+    buildAskPromptWithContextFile('Résume le canal', '.hermes-recap-ctx-1.txt'),
+    expected
+  );
 });
 
 test('buildAskPromptWithContextFile — @file: token is preceded by whitespace (so Hermes parses it)', () => {
@@ -31,13 +42,45 @@ test('buildAskPromptWithContextFile — @file: token is preceded by whitespace (
   assert.match(out, / @file:ctx\.txt$/);
 });
 
-test('buildLinkPrompt — byte-identical, context provided', () => {
-  const expected = `Résume en français le contenu de ce lien : http://x.\nContexte : un test.\nStructure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questions). Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Sois concis.`;
+test('buildLinkPrompt — byte-identical, context provided (uses the shared summary format)', () => {
+  const expected = `Résume en français le contenu de ce lien : http://x.
+Contexte : un test.
+Structure ta réponse en français, en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping), ainsi :
+Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
+**Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
+**Arguments clés** (ou **Points clés** si non argumentatif) : une liste — chaque point commence par **un titre en gras**, suivi de deux ou trois phrases.
+**Questions** : trois questions ouvertes qui prolongent la réflexion.
+Sois concis.`;
   assert.equal(buildLinkPrompt('http://x', 'un test'), expected);
 });
 
 test('buildLinkPrompt — empty context falls back to "aucun"', () => {
   assert.match(buildLinkPrompt('http://x', ''), /Contexte : aucun\./);
+});
+
+test('buildLinkPrompt — embeds the shared buildSummaryFormat()', () => {
+  assert.ok(buildLinkPrompt('http://x', 'ctx').includes(buildSummaryFormat()));
+});
+
+test('buildSummaryFormat — carries the adaptive markers the evals key off', () => {
+  const f = buildSummaryFormat();
+  // hasLinkStructure (evals/assertions.js) matches these — keep in sync.
+  assert.match(f, /\*\*Thèse centrale\*\* \(ou \*\*Idée principale\*\*/);
+  assert.match(f, /\*\*Arguments clés\*\* \(ou \*\*Points clés\*\*/);
+  assert.match(f, /\*\*Questions\*\*/);
+});
+
+test('buildAskPrompt — summarize=false is byte-identical to plain Q&A (no format leak)', () => {
+  const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
+  assert.equal(buildAskPrompt('Quel temps fait-il ?', null, false), expected);
+  // omitting the 3rd arg must behave the same (default false)
+  assert.equal(buildAskPrompt('Quel temps fait-il ?', null), expected);
+});
+
+test('buildAskPrompt — summarize=true appends the shared summary format', () => {
+  const out = buildAskPrompt('Résume ceci', 'Lien: http://x', true);
+  assert.ok(out.startsWith('Contexte : Lien: http://x'));
+  assert.ok(out.endsWith(`\n\n${buildSummaryFormat()}`));
 });
 
 test('buildRecapPrompt — byte-identical and keeps the THEME: contract', () => {
@@ -90,7 +133,10 @@ test('parseHermesOutput — drops a leaked ⚠ CLI diagnostic line (real 0.17.0 
 
 test('parseHermesOutput — preserves a real ⚠️ emoji that leads the answer', () => {
   const stdout = '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.';
-  assert.equal(parseHermesOutput(stdout, '').response, '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.');
+  assert.equal(
+    parseHermesOutput(stdout, '').response,
+    '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.'
+  );
 });
 
 test('parseHermesOutput — session id read from stderr, not stdout', () => {
@@ -109,7 +155,8 @@ test('parseHermesOutput — no session id anywhere yields null', () => {
 // clarify-status leak: Hermes 0.17.0 non-interactive agent-clarification (issue 0922f81)
 
 test('parseHermesOutput — strips a leaked clarify status prefix (inline, real capture)', () => {
-  const stdout = '(clarify timed out after 120s — agent will decide) Voici un résumé des actualités.';
+  const stdout =
+    '(clarify timed out after 120s — agent will decide) Voici un résumé des actualités.';
   assert.equal(parseHermesOutput(stdout, '').response, 'Voici un résumé des actualités.');
 });
 
@@ -120,5 +167,8 @@ test('parseHermesOutput — strips a clarify status on its own line', () => {
 
 test('parseHermesOutput — leaves a non-leading parenthetical untouched', () => {
   const stdout = 'Voici la réponse (clarify quand même, agent will decide). Fin.';
-  assert.equal(parseHermesOutput(stdout, '').response, 'Voici la réponse (clarify quand même, agent will decide). Fin.');
+  assert.equal(
+    parseHermesOutput(stdout, '').response,
+    'Voici la réponse (clarify quand même, agent will decide). Fin.'
+  );
 });

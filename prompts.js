@@ -11,12 +11,32 @@
 
 'use strict';
 
-// Q&A prompt (hermes-discord-bot-clean.js askHermes). Verbatim.
-function buildAskPrompt(question, extraContext) {
+// Shared one-shot summary format for the two summary paths: buildLinkPrompt (auto
+// bare-link summaries) and buildAskPrompt with summarize=true (an @mentioned link).
+// Adaptive labels — "Thèse centrale"/"Arguments clés" for argumentative content
+// (documentaries, essays, op-eds); "Idée principale"/"Points clés" for neutral
+// informational content (news) — so a neutral article isn't forced to invent a thesis.
+// evals/assertions.js hasLinkStructure() keys off the "Thèse centrale"/"Idée principale"
+// + "Questions" markers this emits — keep them in sync.
+function buildSummaryFormat() {
+  return `Structure ta réponse en français, en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping), ainsi :
+Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
+**Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
+**Arguments clés** (ou **Points clés** si non argumentatif) : une liste — chaque point commence par **un titre en gras**, suivi de deux ou trois phrases.
+**Questions** : trois questions ouvertes qui prolongent la réflexion.
+Sois concis.`;
+}
+
+// Q&A prompt (hermes-discord-bot-clean.js askHermes). When summarize=true (the user
+// @mentioned the bot with a link), the shared summary format is appended so an
+// @mentioned link is summarised in the same shape as an auto bare-link summary.
+// summarize=false is byte-identical to the former literal — plain Q&A is unchanged.
+function buildAskPrompt(question, extraContext, summarize = false) {
+  const format = summarize ? `\n\n${buildSummaryFormat()}` : '';
   if (extraContext) {
-    return `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
+    return `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}${format}`;
   }
-  return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}`;
+  return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}${format}`;
 }
 
 // Q&A prompt variant for when extraContext is too large to pass as a single CLI
@@ -30,22 +50,25 @@ function buildAskPromptWithContextFile(question, contextFileRef) {
   return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}\n\nLe contexte de la conversation est fourni en pièce jointe. @file:${contextFileRef}`;
 }
 
-// Link-summary prompt (summarizeLink). Verbatim multi-line literal.
+// Link-summary prompt (summarizeLink). Uses the shared buildSummaryFormat() so bare
+// article-link auto-summaries and @mentioned-link summaries render identically.
 function buildLinkPrompt(url, context) {
   return `Résume en français le contenu de ce lien : ${url}.
 Contexte : ${context || 'aucun'}.
-Structure : 📌 **Résumé** (5-7 lignes max) puis ❓ **Questions** (3 questions). Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Sois concis.`;
+${buildSummaryFormat()}`;
 }
 
 // Recap theme-extraction prompt. Verbatim. Steer the recap by editing this string
 // (or pass an alternate to the eval runner) — but keep the THEME: contract that
 // extractThemes() below depends on.
 function buildRecapPrompt() {
-  return `Voici tous les messages récents de ce canal. ` +
+  return (
+    `Voici tous les messages récents de ce canal. ` +
     `Identifie les thèmes principaux (3 à 5 max) et liste-les simplement. ` +
     `⚠️ FORMAT OBLIGATOIRE — réponds EXACTEMENT comme ceci, une ligne par thème :\n\n` +
     `THEME: Nom du thème 1\nTHEME: Nom du thème 2\nTHEME: Nom du thème 3\n\n` +
-    `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`;
+    `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`
+  );
 }
 
 // Parser for the recap output. Verbatim from the bot's inline loop. The other
@@ -79,7 +102,10 @@ function parseHermesOutput(stdout, stderr) {
   // followed by the emoji variation selector — so a real `⚠️` answer survives.
   while (i < lines.length) {
     const t = lines[i].trim();
-    if (t === '' || (t.charCodeAt(0) === 0x26A0 && t.charCodeAt(1) !== 0xFE0F)) { i++; continue; }
+    if (t === '' || (t.charCodeAt(0) === 0x26a0 && t.charCodeAt(1) !== 0xfe0f)) {
+      i++;
+      continue;
+    }
     break;
   }
   let response = lines.slice(i).join('\n').trim();
@@ -92,4 +118,12 @@ function parseHermesOutput(stdout, stderr) {
   return { response, sessionId: idMatch ? idMatch[1] : null };
 }
 
-module.exports = { buildAskPrompt, buildAskPromptWithContextFile, buildLinkPrompt, buildRecapPrompt, extractThemes, parseHermesOutput };
+module.exports = {
+  buildAskPrompt,
+  buildAskPromptWithContextFile,
+  buildLinkPrompt,
+  buildSummaryFormat,
+  buildRecapPrompt,
+  extractThemes,
+  parseHermesOutput,
+};

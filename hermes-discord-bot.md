@@ -11,8 +11,10 @@ powered by the **Hermes Agent CLI**. The bot does three things:
 
 - **Answers** `@mentions` and DMs in French, with conversation continuity across
   follow-ups (Hermes sessions, cached per channel/thread).
-- **Summarises** article links posted in channels (structured 📌 résumé + ❓
-  questions), skipping non-article URLs (video/image/social).
+- **Summarises** article links posted in channels — a structured summary with an
+  adaptive **Thèse centrale**/**Idée principale**, **Arguments clés**, and
+  **Questions** (see `buildSummaryFormat`); the same shape when a link is
+  @mentioned. Non-article URLs (video/image/social/music) are skipped.
 - **Recaps** channel activity over a requested timeframe as a list of themes,
   posted in a thread.
 
