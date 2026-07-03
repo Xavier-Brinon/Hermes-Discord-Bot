@@ -597,3 +597,43 @@ PASSED. Final diff matches the Pre-Flight commitment: a pure `mentionsUser` help
 
 9 of 10 matrix subtasks PASS: plain sentence / @everyone / @here / other-user / substring-id / empty-input all → false (no trigger); genuine `<@id>` and `<@!id>` → true (still triggers); reply-to-bot is false by construction (content-only helper, no token in a reply); DMs unaffected (gate is `isMentioned || isDirectMessage`, only isMentioned changed); npm test 66/66, eslint 0 errors, prettier clean. The 10th (issue lifecycle) is PENDING and lands at merge.
 
+# Task: reply-to-bot
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: 92b16a6 — Reply-to-bot counts as a mention (continue a conversation without re-typing @Bot)
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Add ONE pure helper `isReplyTo(message, userId)` (= `message?.mentions?.repliedUser?.id === userId`) and OR it into the existing `isMentioned` gate, so a reply to the bot routes through the same Q&A path as an @mention. I will NOT fetch the referenced message, add a separate reply branch, re-introduce `message.mentions.has()`, or touch mentionsUser / the summary paths.
+- **Scope Boundaries:**
+  - In-scope: text.js, hermes-discord-bot-clean.js (gate + import), test/text.test.js
+  - Out-of-scope: mentionsUser, recap/auto-link/@mention-summary paths, config/prompts/hermes-cli/cache/recap
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (compose a second predicate into the existing gate; reuse the whole Q&A path unchanged)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no reply-handling subsystem — one predicate)
+
+### Assumptions
+`.artifacts/reply-to-bot/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the commitment: pure `isReplyTo` (2 logical LOC) OR-ed into the gate; a reply to the bot triggers the Q&A path while @everyone/@here, role pings, plain messages, and replies-to-other-people still do not (f482c08 holds — mentionsUser unchanged, isReplyTo only adds bot-replies). No fetch, no new event, no config knob. Confirmed `repliedUser` semantics from the installed discord.js source before coding.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one predicate OR-ed into the gate; no fetch/handler/subsystem
+- [ ] **Scope Bleed** — only the 3 declared source/test files changed; prettier touched only my added lines
+- [ ] **Style Drift** — isReplyTo mirrors mentionsUser's pure-helper style; eslint 0 errors (4 pre-existing warnings untouched); prettier clean
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge
+
+### Verification Results
+`.artifacts/reply-to-bot/verification_matrix.md`
+
+7 of 8 matrix subtasks PASS: reply-to-bot → true; reply-to-other / non-reply / missing-shape → false; f482c08 noise fix holds (mentionsUser suite unchanged); gate composes `mentionsUser || isReplyTo`; npm test 70/70, eslint 0 errors, prettier clean. The 8th (issue lifecycle) is PENDING and lands at merge.
+

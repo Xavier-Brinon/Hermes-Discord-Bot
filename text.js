@@ -36,6 +36,16 @@ function mentionsUser(content, userId) {
   return new RegExp(`<@!?${userId}>`).test(content || '');
 }
 
+// True when `message` is a reply to a message authored by `userId`. Discord sets
+// message.mentions.repliedUser to the replied-to author for ANY reply (ping on or off)
+// and ONLY for replies, so a reply to the bot counts as a mention while @everyone, a
+// role the bot holds, a plain message, and a reply to someone else do NOT — it pairs
+// with mentionsUser to allow conversation-continuation without reintroducing the noise
+// f482c08 removed. See issue 92b16a6.
+function isReplyTo(message, userId) {
+  return message?.mentions?.repliedUser?.id === userId;
+}
+
 // Unwrap terminal-formatted text: merge lines broken mid-sentence
 // Hermes outputs at ~80 chars regardless of prompt instructions
 function unwrapText(text) {
@@ -189,6 +199,7 @@ module.exports = {
   NON_ARTICLE_PATTERN,
   isNonArticleUrl,
   mentionsUser,
+  isReplyTo,
   unwrapText,
   splitAtBoundaries,
   formatHermesResponse,

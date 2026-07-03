@@ -21,6 +21,7 @@ const { buildRecapPrompt, extractThemes } = require('./prompts');
 const {
   isNonArticleUrl,
   mentionsUser,
+  isReplyTo,
   formatHermesResponse,
   safeReply,
   sendLongResponse,
@@ -158,10 +159,12 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (PROCESSED_MESSAGES.has(message.id)) return;
 
-  // A real @mention only — NOT @everyone/@here, a role the bot holds, or a reply to
-  // the bot's message (message.mentions.has() counts all three, which made the bot
-  // answer every reply and every @everyone). See issue f482c08.
-  const isMentioned = mentionsUser(message.content, client.user.id);
+  // A real @mention OR a reply to the bot's own message (conversation continuation) —
+  // still NOT @everyone/@here, a role the bot holds, or a reply to someone else.
+  // message.mentions.has() counted all of those (issue f482c08); we opt reply-to-bot
+  // back in explicitly (issue 92b16a6).
+  const isMentioned =
+    mentionsUser(message.content, client.user.id) || isReplyTo(message, client.user.id);
   const isDirectMessage = message.channel.type === 'DM';
 
   // --- Server restriction ---

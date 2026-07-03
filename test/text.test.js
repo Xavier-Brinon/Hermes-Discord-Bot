@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const {
   isNonArticleUrl,
   mentionsUser,
+  isReplyTo,
   unwrapText,
   splitAtBoundaries,
   safeReply,
@@ -138,6 +139,31 @@ test('mentionsUser — false/no-throw on empty or missing content', () => {
   assert.equal(mentionsUser('', BOT_ID), false);
   assert.equal(mentionsUser(null, BOT_ID), false);
   assert.equal(mentionsUser(undefined, BOT_ID), false);
+});
+
+// --- isReplyTo ------------------------------------------------------------
+// Reply-to-bot counts as a mention (issue 92b16a6). Duck-typed message: Discord sets
+// message.mentions.repliedUser to the replied-to author, and only for replies.
+
+test('isReplyTo — true when the message replies to the given user', () => {
+  assert.equal(isReplyTo({ mentions: { repliedUser: { id: BOT_ID } } }, BOT_ID), true);
+});
+
+test('isReplyTo — false when the reply is to a DIFFERENT user', () => {
+  assert.equal(
+    isReplyTo({ mentions: { repliedUser: { id: '987654321098765432' } } }, BOT_ID),
+    false
+  );
+});
+
+test('isReplyTo — false when not a reply (repliedUser null/absent)', () => {
+  assert.equal(isReplyTo({ mentions: { repliedUser: null } }, BOT_ID), false);
+  assert.equal(isReplyTo({ mentions: {} }, BOT_ID), false);
+});
+
+test('isReplyTo — no throw on missing mentions/message', () => {
+  assert.equal(isReplyTo({}, BOT_ID), false);
+  assert.equal(isReplyTo(null, BOT_ID), false);
 });
 
 // --- safeReply ------------------------------------------------------------
