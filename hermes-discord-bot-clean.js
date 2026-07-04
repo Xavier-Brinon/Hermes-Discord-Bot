@@ -6,7 +6,7 @@
 // prompts.js; this file keeps only Discord-client-coupled concerns. See issue 950dc54.
 
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const {
   HERMES_BIN,
   ALLOWED_GUILD_ID,
@@ -14,12 +14,13 @@ const {
   messagesFR,
   HISTORY_PATTERN,
   LINK_PATTERN,
+  SUMMARY_REACTION,
   DISCORD_MSG_LIMIT,
   TIMEOUT_RECAP,
 } = require('./config');
 const { buildRecapPrompt, extractThemes } = require('./prompts');
 const {
-  isNonArticleUrl,
+  extractArticleLinks,
   mentionsUser,
   isReplyTo,
   formatHermesResponse,
@@ -46,6 +47,17 @@ function rememberMessage(id) {
   PROCESSED_MESSAGES.add(id);
   if (PROCESSED_MESSAGES.size > MAX_PROCESSED_MESSAGES) {
     PROCESSED_MESSAGES.delete(PROCESSED_MESSAGES.values().next().value);
+  }
+}
+
+// Same bounded-FIFO idea for the 📝-reaction path: once a message has been summarised,
+// remember its id so a second member reacting 📝 doesn't summarise it again (issue c8dafc0).
+const REACTED_MESSAGES = new Set();
+const MAX_REACTED_MESSAGES = 1000;
+function rememberReaction(id) {
+  REACTED_MESSAGES.add(id);
+  if (REACTED_MESSAGES.size > MAX_REACTED_MESSAGES) {
+    REACTED_MESSAGES.delete(REACTED_MESSAGES.values().next().value);
   }
 }
 
@@ -100,8 +112,13 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
+    // Receive messageReactionAdd for the 📝-reaction summary trigger (issue c8dafc0).
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: ['CHANNEL'],
+  // discord.js v14 uses the Partials enum (the v13 string 'CHANNEL' was inert). Channel is
+  // needed for DM events; Message + Reaction let messageReactionAdd fire on messages the bot
+  // did not cache — e.g. an old message reacted to after a restart (issue c8dafc0).
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction],
 });
 
 // Get the token from environment
@@ -376,79 +393,117 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // --- Auto-detect: link without @mention ---
-  const links = message.content.match(LINK_PATTERN);
-  if (links && links.length > 0) {
-    // Filter: only article-like URLs, skip videos/images/social media silently
-    const articleLinks = links.filter((l) => !isNonArticleUrl(l));
-    if (articleLinks.length === 0) return; // nothing to summarize, silently skip
+  // Summaries are no longer automatic on link-post — they are opt-in via the 📝 reaction
+  // (see the messageReactionAdd handler below). Auto-summary was removed in issue c8dafc0.
+});
 
-    rememberMessage(message.id);
-    const context = message.content.replace(LINK_PATTERN, '').trim();
+// Summarise the article link(s) in a message and reply with the structured summary. Moved
+// verbatim from the former auto-detect block (issue c8dafc0) so the 📝-reaction handler and
+// any future caller share one flow: 👀 while working, a pending placeholder, up to 3 links,
+// thread-split if long, ✅/❌ at the end, and an admin DM (never a channel reply) on failure.
+// `message` is a full (fetched) Message; `articleLinks` is the non-empty result of
+// extractArticleLinks — the caller has already decided there is something to summarise.
+async function summariseArticleLinks(message, articleLinks) {
+  const context = message.content.replace(LINK_PATTERN, '').trim();
 
-    let pendingMsg;
-    try {
-      await message.react('👀');
-      pendingMsg = await message.reply(
-        "🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…"
-      );
+  let pendingMsg;
+  try {
+    await message.react('👀');
+    pendingMsg = await message.reply(
+      "🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…"
+    );
 
-      // Summarize each article link (up to 3)
-      const linksToProcess = articleLinks.slice(0, 3);
-      const summaries = [];
-      for (const link of linksToProcess) {
-        const summary = await summarizeLink(link, context);
-        summaries.push(summary);
-      }
+    // Summarize each article link (up to 3)
+    const linksToProcess = articleLinks.slice(0, 3);
+    const summaries = [];
+    for (const link of linksToProcess) {
+      const summary = await summarizeLink(link, context);
+      summaries.push(summary);
+    }
 
-      const response = summaries.join('\n---\n');
+    const response = summaries.join('\n---\n');
 
-      // If response is too long, delete pending msg and use thread splitter
-      if (response.length > DISCORD_MSG_LIMIT) {
+    // If response is too long, delete pending msg and use thread splitter
+    if (response.length > DISCORD_MSG_LIMIT) {
+      await pendingMsg.delete();
+      await sendLongResponse(message, response);
+    } else {
+      await pendingMsg.edit(response);
+    }
+
+    // Cache the last link for follow-up questions in this channel
+    setCachedLink(message.channel.id, linksToProcess[0]);
+
+    await finalizeReaction(message, true);
+  } catch (error) {
+    console.error('Link summary error:', error);
+
+    // Silently fail: delete pending message, remove 👀, DM admin only
+    if (pendingMsg) {
+      try {
         await pendingMsg.delete();
-        await sendLongResponse(message, response);
-      } else {
-        await pendingMsg.edit(response);
-      }
-
-      // Cache the last link for follow-up questions in this channel
-      setCachedLink(message.channel.id, linksToProcess[0]);
-
-      await finalizeReaction(message, true);
-    } catch (error) {
-      console.error('Link summary error:', error);
-
-      // Silently fail: delete pending message, remove 👀, DM admin only
-      if (pendingMsg) {
+      } catch (_) {}
+    }
+    try {
+      const botReactions = message.reactions.cache.filter((r) => r.me);
+      for (const [, reaction] of botReactions) {
         try {
-          await pendingMsg.delete();
+          await reaction.users.remove(client.user.id);
         } catch (_) {}
       }
-      try {
-        const botReactions = message.reactions.cache.filter((r) => r.me);
-        for (const [, reaction] of botReactions) {
-          try {
-            await reaction.users.remove(client.user.id);
-          } catch (_) {}
-        }
-      } catch (_) {}
+    } catch (_) {}
 
-      // Build rich notification for admin
-      const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
-      const guildName = message.guild ? message.guild.name : 'DM';
-      const details = [
-        `URL: ${articleLinks[0]}`,
-        `Auteur: ${message.author.tag}`,
-        `Salon: ${channelName} (${guildName})`,
-        `Lien message: ${message.url}`,
-        error.cliStdout ? `Sortie LLM: ${error.cliStdout.trim()}` : null,
-        `Temps: ${error.elapsed || '?'}s`,
-        `Erreur: ${error.cliStderr || error.message}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
-      notifyAdmin('Résumé de lien échoué', details);
-    }
+    // Build rich notification for admin
+    const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
+    const guildName = message.guild ? message.guild.name : 'DM';
+    const details = [
+      `URL: ${articleLinks[0]}`,
+      `Auteur: ${message.author.tag}`,
+      `Salon: ${channelName} (${guildName})`,
+      `Lien message: ${message.url}`,
+      error.cliStdout ? `Sortie LLM: ${error.cliStdout.trim()}` : null,
+      `Temps: ${error.elapsed || '?'}s`,
+      `Erreur: ${error.cliStderr || error.message}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    notifyAdmin('Résumé de lien échoué', details);
+  }
+}
+
+// --- 📝 reaction → summarise the message's article link(s) (issue c8dafc0) ---
+// Opt-in replacement for auto-summary: a member reacts 📝 to a message that has an article
+// link and the bot summarises it. No link, or only non-article links (YouTube/Spotify/…) →
+// the bot stays silent. The whole handler is wrapped so a transient fetch failure logs
+// instead of escaping as an unhandled rejection (issue 1ff433a).
+client.on('messageReactionAdd', async (reaction, user) => {
+  try {
+    if (user.bot) return; // ignore the bot's own ✅/❌/👀 reactions
+
+    // Match the emoji FIRST — emoji.name is present even on a partial reaction, so an
+    // unrelated 👍/❤️ costs nothing (no REST fetch for every reaction in the server).
+    if (reaction.emoji.name !== SUMMARY_REACTION) return;
+
+    // The reaction (and its message) can be partial when the message pre-dates the bot's
+    // cache — e.g. an old message reacted to after a restart. Hydrate before reading it.
+    if (reaction.partial) await reaction.fetch();
+    if (reaction.message.partial) await reaction.message.fetch();
+
+    const message = reaction.message;
+
+    // Guild restriction — the feature is server-only; a 📝 in a DM has no guild.
+    if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID) return;
+
+    // Dedup: several members reacting 📝 summarise the message once.
+    if (REACTED_MESSAGES.has(message.id)) return;
+
+    const articleLinks = extractArticleLinks(message.content);
+    if (articleLinks.length === 0) return; // no article link → stay silent
+
+    rememberReaction(message.id);
+    await summariseArticleLinks(message, articleLinks);
+  } catch (error) {
+    console.error('Reaction handler error:', error.message);
   }
 });
 

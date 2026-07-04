@@ -7,6 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   isNonArticleUrl,
+  extractArticleLinks,
   mentionsUser,
   isReplyTo,
   unwrapText,
@@ -101,6 +102,46 @@ test('isNonArticleUrl — reddit posts are articles (NOT skipped — some are wo
     false
   );
   assert.equal(isNonArticleUrl('https://old.reddit.com/r/programming/comments/xyz/'), false);
+});
+
+// --- extractArticleLinks --------------------------------------------------
+// The 📝-reaction trigger reads [] as "no article to summarise, stay silent" (issue c8dafc0).
+
+test('extractArticleLinks — returns the article link in a message', () => {
+  assert.deepEqual(extractArticleLinks('à lire : https://lemonde.fr/article/123'), [
+    'https://lemonde.fr/article/123',
+  ]);
+});
+
+test('extractArticleLinks — [] when there is no link (stay silent)', () => {
+  assert.deepEqual(extractArticleLinks('bonjour tout le monde'), []);
+});
+
+test('extractArticleLinks — [] when every link is a non-article (youtube/spotify)', () => {
+  assert.deepEqual(extractArticleLinks('https://youtube.com/watch?v=abc'), []);
+  assert.deepEqual(
+    extractArticleLinks('https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5'),
+    []
+  );
+});
+
+test('extractArticleLinks — returns every article link, in order', () => {
+  assert.deepEqual(extractArticleLinks('un https://lemonde.fr/1 puis https://lefigaro.fr/2'), [
+    'https://lemonde.fr/1',
+    'https://lefigaro.fr/2',
+  ]);
+});
+
+test('extractArticleLinks — mixed: keeps the article, drops the video', () => {
+  assert.deepEqual(extractArticleLinks('https://lemonde.fr/a et https://youtube.com/watch?v=x'), [
+    'https://lemonde.fr/a',
+  ]);
+});
+
+test('extractArticleLinks — no throw on empty/null/undefined', () => {
+  assert.deepEqual(extractArticleLinks(''), []);
+  assert.deepEqual(extractArticleLinks(null), []);
+  assert.deepEqual(extractArticleLinks(undefined), []);
 });
 
 // --- mentionsUser ---------------------------------------------------------

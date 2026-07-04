@@ -36,6 +36,10 @@ const LINK_PATTERN = /https?:\/\/\S+/i;
 const HISTORY_PATTERN =
   /\b(résume|récap|récapitul|activité|semaine|derniers?\s*messages|derniers?\s*jours?|quoi\s+de\s+neuf|que\s+s['e]est\s+passé|historique|archive|summarize|recap|summary|activity|past\s+week|recent\s+messages|what\s+happened|catch\s+me\s+up|last\s+week|last\s+few\s+days)\b/i;
 
+// Emoji a member reacts with to request a link summary — summaries are opt-in via this
+// reaction, not automatic on link-post (issue c8dafc0).
+const SUMMARY_REACTION = '📝';
+
 // Server restriction + admin (from env; the entrypoint enforces the required guild).
 const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
@@ -83,6 +87,7 @@ module.exports = {
   DISCORD_MSG_LIMIT,
   LINK_PATTERN,
   HISTORY_PATTERN,
+  SUMMARY_REACTION,
   ALLOWED_GUILD_ID,
   ADMIN_USER_ID,
   messagesFR,

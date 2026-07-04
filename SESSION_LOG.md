@@ -637,3 +637,43 @@ PASSED. Final diff matches the commitment: pure `isReplyTo` (2 logical LOC) OR-e
 
 7 of 8 matrix subtasks PASS: reply-to-bot → true; reply-to-other / non-reply / missing-shape → false; f482c08 noise fix holds (mentionsUser suite unchanged); gate composes `mentionsUser || isReplyTo`; npm test 70/70, eslint 0 errors, prettier clean. The 8th (issue lifecycle) is PENDING and lands at merge.
 
+
+# Task: reaction-summaries
+complexity_score: 4
+complexity_tier: STANDARD
+
+Radicle issue: c8dafc0 — Reaction-triggered summaries: react 📝 to summarise a link; remove auto-summary-on-post
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** I will add ONE pure `extractArticleLinks(content)` (text.js), ONE `SUMMARY_REACTION` constant (config.js), enable the `GuildMessageReactions` intent + `Partials.Channel/Message/Reaction`, MOVE the auto-detect summarise-and-reply body verbatim into a `summariseArticleLinks(message, links)` fn, add a `messageReactionAdd` handler (partials → 📝 → guild → dedup → summarise), and DELETE the old auto-detect block. I will NOT refactor the working messageCreate dedup, add a link-count/emoji config knob, handle DM reactions, or support un-reacting.
+- **Scope Boundaries:**
+  - In-scope: text.js, config.js, hermes-discord-bot-clean.js (intents/partials + handler + extracted fn + block removal + import swap), test/text.test.js
+  - Out-of-scope: hermes-cli.js, prompts.js, recap.js, cache.js, and the @mention/DM Q&A + recap handlers
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (move the summarise body verbatim rather than rewrite it; reuse `summarizeLink`/`setCachedLink`/`finalizeReaction` unchanged; the reaction handler is the only net-new logic)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no reaction-router/link-service object — one pure helper + one thin handler)
+
+### Assumptions
+`.artifacts/reaction-summaries/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: a pure `extractArticleLinks` (text.js), a `SUMMARY_REACTION` constant (config.js), the `GuildMessageReactions` intent + `Partials.Channel/Message/Reaction` (the inert v13 `'CHANNEL'` string fixed to the enum), the auto-detect summarise-and-reply body moved VERBATIM into `summariseArticleLinks(message, links)`, a thin `messageReactionAdd` handler (emoji-first short-circuit → partial-resolve → guild → dedup → summarise), and the old auto-detect block deleted. No generic bounded-set factory (mirrored the existing FIFO instead), no link-count/emoji config knob, no DM-reaction support, no un-react handling — all logged as abstained. Partials/intent/event surface verified against the installed discord.js 14.26.4 before coding (`Partials.Channel/Message/Reaction` = 1/3/4; `Events.MessageReactionAdd`).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — net-new logic is one pure helper + one thin handler + a mirrored dedup set; `summariseArticleLinks` is a verbatim extract, not new code. Budget re-planned 65→90 for the moved lines (justified in simplicity_review, no new branching).
+- [ ] **Scope Bleed** — only the 4 declared files changed. config.js kept surgical: prettier wanted to reformat two PRE-EXISTING `aujourd'hui` apostrophe lines (already dirty on HEAD, proven via `git show HEAD:config.js | prettier --check`); I reverted that drive-by so my diff is only the 2 added lines.
+- [ ] **Style Drift** — `extractArticleLinks` mirrors `isNonArticleUrl`'s pure-classifier style; the handler mirrors the existing `messageCreate` try/catch + FIFO idiom; eslint 0 errors (4 pre-existing `no-unused-vars` warnings, unchanged count — 3 moved with the verbatim code); prettier clean on all my changed lines.
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/reaction-summaries/verification_matrix.md`
+
+10 of 11 matrix subtasks PASS: extractArticleLinks returns article links / drops non-articles / [] on no-link / keeps order / no-throw on empty-null (6 new unit tests, 76/76 total); `SUMMARY_REACTION === '📝'` exported; Partials fixed to the enum + module `node --check` clean; auto-detect block removed (grep confirms); `isNonArticleUrl` orphan import removed (eslint clean); npm test 76/76, eslint 0 errors, prettier clean on changed JS. The 11th (issue lifecycle) is PENDING and lands at merge. Runtime Discord behaviour (react 📝 on a live message) is deferred to the post-deploy check on the VPS — not reproducible from the local checkout.

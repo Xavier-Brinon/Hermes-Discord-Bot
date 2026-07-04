@@ -7,7 +7,12 @@
 
 'use strict';
 
-const { messagesFR, DISCORD_MSG_LIMIT } = require('./config');
+const { messagesFR, DISCORD_MSG_LIMIT, LINK_PATTERN } = require('./config');
+
+// Global variant of config.LINK_PATTERN to collect EVERY URL in a message — String.match
+// with the non-global LINK_PATTERN returns only the first. Built once; String.match with a
+// global regex does not use lastIndex, so this module-level instance is safe to reuse.
+const ALL_LINKS_PATTERN = new RegExp(LINK_PATTERN.source, 'gi');
 
 // URLs that are NOT articles — skip silently (used to filter auto link-summaries).
 // Covers social/video/image hosts, raw media files, and music-streaming/player links
@@ -24,6 +29,16 @@ const NON_ARTICLE_PATTERN =
 // True when a URL is a non-article (social/media/image) link the bot should not summarise.
 function isNonArticleUrl(url) {
   return NON_ARTICLE_PATTERN.test(url);
+}
+
+// The article links in `content`, in order, skipping non-article (social/media/music)
+// URLs. Returns [] when there is no link or every link is a non-article — the 📝-reaction
+// handler reads [] as "no article to summarise, stay silent". Pure; the caller caps how
+// many it actually summarises. See issue c8dafc0.
+function extractArticleLinks(content) {
+  const links = (content || '').match(ALL_LINKS_PATTERN);
+  if (!links) return [];
+  return links.filter((url) => !isNonArticleUrl(url));
 }
 
 // True when the user directly @mentioned `userId` in the message TEXT — i.e. typed
@@ -198,6 +213,7 @@ async function sendLongResponse(message, text) {
 module.exports = {
   NON_ARTICLE_PATTERN,
   isNonArticleUrl,
+  extractArticleLinks,
   mentionsUser,
   isReplyTo,
   unwrapText,
