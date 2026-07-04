@@ -25,6 +25,25 @@ function extractLinks(content) {
   return (content || '').match(ALL_LINKS_PATTERN) || [];
 }
 
+// Ground-truth metadata for `url` from the Discord message's embed: { title, author,
+// provider }, or null when there's no usable embed. Discord resolves a rich embed (title +
+// channel/author) for YouTube/link posts; the summariser anchors Hermes on it so it can't
+// hallucinate a different video/page. Prefers the embed whose `.url` matches the link; falls
+// back to the sole embed (Discord normalises youtu.be → youtube.com/watch, so exact-url can
+// miss on a single-link message). Pure + duck-typed for tests. See issue 1b94451.
+function extractLinkMeta(message, url) {
+  const embeds = message && message.embeds;
+  if (!Array.isArray(embeds) || embeds.length === 0) return null;
+  const byUrl = embeds.find((e) => e && e.title && e.url && e.url === url);
+  const embed = byUrl || (embeds.length === 1 && embeds[0] && embeds[0].title ? embeds[0] : null);
+  if (!embed || !embed.title) return null;
+  return {
+    title: embed.title,
+    author: (embed.author && embed.author.name) || null,
+    provider: (embed.provider && embed.provider.name) || null,
+  };
+}
+
 // True when the user directly @mentioned `userId` in the message TEXT — i.e. typed
 // @Bot, so its `<@id>` / `<@!id>` token is in the content (the same token the handler
 // strips). Deliberately content-only: unlike discord.js's message.mentions.has(),
@@ -196,6 +215,7 @@ async function sendLongResponse(message, text) {
 
 module.exports = {
   extractLinks,
+  extractLinkMeta,
   mentionsUser,
   isReplyTo,
   unwrapText,

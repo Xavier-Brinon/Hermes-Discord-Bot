@@ -73,6 +73,13 @@ const messagesFR = {
   fallbackResponse:
     "🤔 Je n'ai pas trouvé d'information précise sur '{command}'.\n" +
     'Pouvez-vous reformuler ou poser une autre question ?',
+
+  // Posted when the summariser could not read the real content behind a link (page not
+  // readable, or a video with no accessible transcript) — an honest abstention instead of a
+  // fabricated summary. See issue 1b94451.
+  linkUnreadable:
+    "🔗 Je n'ai pas pu accéder au contenu réel de ce lien (page non lisible ou vidéo sans " +
+    'transcription accessible). Je préfère ne pas inventer de résumé.',
 };
 
 module.exports = {

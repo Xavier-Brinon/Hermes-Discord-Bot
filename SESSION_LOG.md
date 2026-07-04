@@ -717,3 +717,43 @@ PASSED. Final diff matches the Pre-Flight commitment: a 2-line pure `extractLink
 `.artifacts/reaction-any-link/verification_matrix.md`
 
 8 of 9 matrix subtasks PASS: extractLinks returns all links / silent on no-link / keeps YouTube+Spotify (no filter) / no-throw on empty-null (5 new unit tests); denylist removed (grep: no definition/export/prod-reference, only an explanatory comment); no dangling refs (node --check clean, eslint no-undef clean); handler summarises any link via summariseLinks; npm test 71/71 (was 76; −10 denylist tests +5 extractLinks), eslint 0 errors, prettier clean on changed JS except pre-existing modules.test.js/config.js dirt. The 9th (issue lifecycle) is PENDING and lands at merge. Runtime Discord behaviour (📝 on a YouTube link → summary) verified on deploy.
+
+# Task: embed-anchor-summary
+complexity_score: 4
+complexity_tier: STANDARD
+
+Radicle issue: 1b94451 — 📝 summary: anchor on the Discord embed title/author; abstain if the fetch doesn't match
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Pure `extractLinkMeta(message, url)` (text.js) reads {title, author, provider} off the matching Discord embed; `buildLinkPrompt(url, context, meta)` prepends an anchor + verify-or-abstain-with-sentinel clause (meta=null byte-identical); `summarizeLink(url, context, meta)` maps the sentinel → an honest `messagesFR.linkUnreadable`; `summariseLinks` extracts meta per link. I will NOT add a bot-side title-match comparator, a transcript fetcher, an @mention-path anchor, or a config knob — those are deferred.
+- **Scope Boundaries:**
+  - In-scope: text.js, prompts.js, hermes-cli.js, hermes-discord-bot-clean.js, config.js, test/text.test.js, test/prompts.test.js
+  - Out-of-scope: recap.js, cache.js, buildAskPrompt @mention path, parseHermesOutput
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (thread one optional `meta` arg through the existing summary path; meta=null stays byte-identical; one sentinel check, no new subsystem)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no verification/embed-parser object — one pure fn + one prompt clause)
+
+### Assumptions
+`.artifacts/embed-anchor-summary/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: pure `extractLinkMeta(message, url)` (text.js) reads {title, author, provider} off the matching embed; `buildLinkPrompt(url, context, meta)` prepends the anchor + verify + `CONTENU_INACCESSIBLE` sentinel clause (meta=null byte-identical — the existing byte-identity test still passes); `summarizeLink(url, context, meta)` maps the sentinel → `messagesFR.linkUnreadable`; `summariseLinks` extracts meta per link. No bot-side title comparator, no transcript fetcher, no @mention-path anchor, no config knob — all abstained. Generated prompt eyeballed (grounded on the real title/author) + sentinel→message mapping simulated.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one pure fn + one optional prompt arg + one sentinel check; meta=null path unchanged. 39 logical LOC vs 35 target (+11%, under trigger). Bot-side comparator + transcript capability explicitly deferred.
+- [ ] **Scope Bleed** — only the 7 declared files + artifacts/SESSION_LOG/METRICS changed. config.js kept surgical (prettier flags only the pre-existing `aujourd'hui` lines 52/71, not my linkUnreadable). @mention path + parseHermesOutput untouched.
+- [ ] **Style Drift** — extractLinkMeta mirrors the pure-helper style; the sentinel const + message mirror existing config/prompts patterns; eslint 0 errors (4 pre-existing warnings, unchanged); prettier clean on my changed lines.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/embed-anchor-summary/verification_matrix.md`
+
+9 of 11 matrix subtasks PASS (unit-testable): extractLinkMeta reads title/author/provider, matches by url, null on no-embed/no-title, null on no-url-match (no wrong anchor), no-throw on missing shape; buildLinkPrompt meta=null byte-identical, with-meta carries title/author/provider + sentinel + VÉRIFICATION; npm test 79/79 (+8), eslint 0 errors, prettier clean on changed JS. The sentinel→honest-message mapping is code-reviewed + simulated (integration — summarizeLink shells out, not unit-run). The 2 remaining — abstention RELIABILITY (prompt-dependent) and issue lifecycle — are DEPLOY/merge-time: the actual "Hermes abstains on the fairy video" can't be reproduced from the local checkout (no Hermes CLI); verified on the VPS after deploy, eval follow-up noted.

@@ -9,6 +9,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  LINK_UNREADABLE_SENTINEL,
   buildAskPrompt,
   buildAskPromptWithContextFile,
   buildLinkPrompt,
@@ -60,6 +61,34 @@ test('buildLinkPrompt — empty context falls back to "aucun"', () => {
 
 test('buildLinkPrompt — embeds the shared buildSummaryFormat()', () => {
   assert.ok(buildLinkPrompt('http://x', 'ctx').includes(buildSummaryFormat()));
+});
+
+// --- buildLinkPrompt with the embed anchor (issue 1b94451) -----------------
+
+test('buildLinkPrompt — meta=null is byte-identical to no meta (behaviour unchanged)', () => {
+  assert.equal(buildLinkPrompt('http://x', 'ctx', null), buildLinkPrompt('http://x', 'ctx'));
+});
+
+test('buildLinkPrompt — with meta, anchors on title/author/provider + the abstain sentinel', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'aucun', {
+    title: 'Et si les fées existaient vraiment ?',
+    author: 'FLORIEGRAPHIE',
+    provider: 'YouTube',
+  });
+  assert.match(prompt, /Et si les fées existaient vraiment \?/);
+  assert.match(prompt, /FLORIEGRAPHIE/);
+  assert.match(prompt, /YouTube/);
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL), 'must instruct the sentinel');
+  assert.match(prompt, /VÉRIFICATION OBLIGATOIRE/);
+  // still carries the shared summary format
+  assert.ok(prompt.includes(buildSummaryFormat()));
+});
+
+test('buildLinkPrompt — meta with only a title omits the author/provider clauses', () => {
+  const prompt = buildLinkPrompt('http://x', 'ctx', { title: 'Titre seul' });
+  assert.match(prompt, /« Titre seul »/);
+  assert.doesNotMatch(prompt, /auteur\/chaîne/);
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL));
 });
 
 test('buildSummaryFormat — carries the adaptive markers the evals key off', () => {

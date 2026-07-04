@@ -7,6 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   extractLinks,
+  extractLinkMeta,
   mentionsUser,
   isReplyTo,
   unwrapText,
@@ -101,6 +102,62 @@ test('extractLinks — no throw on empty/null/undefined', () => {
   assert.deepEqual(extractLinks(''), []);
   assert.deepEqual(extractLinks(null), []);
   assert.deepEqual(extractLinks(undefined), []);
+});
+
+// --- extractLinkMeta ------------------------------------------------------
+// Ground-truth {title, author, provider} from the Discord message embed, so the summariser
+// can anchor Hermes and abstain instead of hallucinating (issue 1b94451). Duck-typed embeds.
+
+test('extractLinkMeta — reads title/author/provider from the (sole) embed', () => {
+  const message = {
+    embeds: [
+      {
+        url: 'https://www.youtube.com/watch?v=abc',
+        title: 'Et si les fées existaient vraiment ?',
+        author: { name: 'FLORIEGRAPHIE' },
+        provider: { name: 'YouTube' },
+      },
+    ],
+  };
+  assert.deepEqual(extractLinkMeta(message, 'https://youtu.be/abc'), {
+    title: 'Et si les fées existaient vraiment ?',
+    author: 'FLORIEGRAPHIE',
+    provider: 'YouTube',
+  });
+});
+
+test('extractLinkMeta — with several embeds, picks the one whose url matches the link', () => {
+  const message = {
+    embeds: [
+      { url: 'https://a.com/1', title: 'Un', author: { name: 'A' } },
+      { url: 'https://b.com/2', title: 'Deux', author: { name: 'B' } },
+    ],
+  };
+  assert.deepEqual(extractLinkMeta(message, 'https://b.com/2'), {
+    title: 'Deux',
+    author: 'B',
+    provider: null,
+  });
+});
+
+test('extractLinkMeta — null when there is no embed / no title', () => {
+  assert.equal(extractLinkMeta({ embeds: [] }, 'https://x'), null);
+  assert.equal(extractLinkMeta({ embeds: [{ url: 'https://x' }] }, 'https://x'), null);
+});
+
+test('extractLinkMeta — no url match across multiple embeds → null (no wrong anchor)', () => {
+  const message = {
+    embeds: [
+      { url: 'https://a.com/1', title: 'Un' },
+      { url: 'https://b.com/2', title: 'Deux' },
+    ],
+  };
+  assert.equal(extractLinkMeta(message, 'https://c.com/3'), null);
+});
+
+test('extractLinkMeta — no throw on missing message/embeds', () => {
+  assert.equal(extractLinkMeta(null, 'https://x'), null);
+  assert.equal(extractLinkMeta({}, 'https://x'), null);
 });
 
 // --- mentionsUser ---------------------------------------------------------

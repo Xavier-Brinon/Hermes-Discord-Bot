@@ -21,6 +21,7 @@ const {
 const { buildRecapPrompt, extractThemes } = require('./prompts');
 const {
   extractLinks,
+  extractLinkMeta,
   mentionsUser,
   isReplyTo,
   formatHermesResponse,
@@ -413,11 +414,12 @@ async function summariseLinks(message, links) {
       "🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…"
     );
 
-    // Summarize each link (up to 3)
+    // Summarize each link (up to 3). Anchor each on its Discord embed (title/author) so
+    // Hermes verifies it read the right content before summarising (issue 1b94451).
     const linksToProcess = links.slice(0, 3);
     const summaries = [];
     for (const link of linksToProcess) {
-      const summary = await summarizeLink(link, context);
+      const summary = await summarizeLink(link, context, extractLinkMeta(message, link));
       summaries.push(summary);
     }
 

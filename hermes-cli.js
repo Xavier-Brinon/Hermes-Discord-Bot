@@ -19,6 +19,7 @@ const {
   buildAskPromptWithContextFile,
   buildLinkPrompt,
   parseHermesOutput,
+  LINK_UNREADABLE_SENTINEL,
 } = require('./prompts');
 const { unwrapText } = require('./text');
 
@@ -138,11 +139,15 @@ function askHermes(
   });
 }
 
-// Summarize a link via Hermes with web tools. Returns the formatted summary string.
-function summarizeLink(url, context) {
+// Summarize a link via Hermes with web tools. Returns the formatted summary string, or the
+// honest `messagesFR.linkUnreadable` when Hermes reports (via the sentinel) that it could not
+// read the real content behind the link. `meta` ({ title, author, provider } from the Discord
+// embed) anchors the summary on the link's known identity so Hermes can't fabricate a
+// different video/page — see buildLinkPrompt and issue 1b94451.
+function summarizeLink(url, context, meta = null) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    const prompt = buildLinkPrompt(url, context);
+    const prompt = buildLinkPrompt(url, context, meta);
 
     console.log(`📤 Summarizing link: ${url}`);
 
@@ -175,6 +180,12 @@ function summarizeLink(url, context) {
         // Parse Hermes -Q output, then unwrap terminal line-breaks.
         let { response } = parseHermesOutput(stdout, stderr);
         response = unwrapText(response);
+        // Anchor abstention: Hermes emits the sentinel when the fetched content doesn't match
+        // the link's known title/author (or it couldn't read it) — post an honest message
+        // instead of a fabricated summary. See issue 1b94451.
+        if (response && new RegExp(`\\b${LINK_UNREADABLE_SENTINEL}\\b`).test(response)) {
+          return resolve(messagesFR.linkUnreadable);
+        }
         resolve(
           response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`
         );

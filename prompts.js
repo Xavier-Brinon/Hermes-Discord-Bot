@@ -50,11 +50,33 @@ function buildAskPromptWithContextFile(question, contextFileRef) {
   return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}\n\nLe contexte de la conversation est fourni en pièce jointe. @file:${contextFileRef}`;
 }
 
+// Emitted by Hermes (per buildLinkPrompt's anchor clause) when the content it retrieved does
+// not match the link's known title/author, or it could not read the real content — so the bot
+// posts an honest abstention instead of a fabricated summary. summarizeLink detects this token.
+// See issue 1b94451.
+const LINK_UNREADABLE_SENTINEL = 'CONTENU_INACCESSIBLE';
+
 // Link-summary prompt (summarizeLink). Uses the shared buildSummaryFormat() so bare
-// article-link auto-summaries and @mentioned-link summaries render identically.
-function buildLinkPrompt(url, context) {
+// article-link auto-summaries and @mentioned-link summaries render identically. When `meta`
+// (from the Discord embed: { title, author, provider }) is present, it becomes a ground-truth
+// anchor — Hermes must confirm what it fetched matches that title/author before summarising,
+// else emit LINK_UNREADABLE_SENTINEL. This stops it hallucinating a different video/page when
+// the link (e.g. a YouTube URL) isn't readable via -t web. meta=null is byte-identical to the
+// former prompt. See issue 1b94451.
+function buildLinkPrompt(url, context, meta = null) {
+  const anchor =
+    meta && meta.title
+      ? `\nCe lien est identifié (via ses métadonnées Discord) comme : « ${meta.title} »` +
+        `${meta.author ? ` — auteur/chaîne « ${meta.author} »` : ''}` +
+        `${meta.provider ? ` (${meta.provider})` : ''}.\n` +
+        `VÉRIFICATION OBLIGATOIRE avant de résumer : le contenu que tu récupères doit ` +
+        `correspondre à CE titre et à CET auteur. Si ce n'est pas le cas, ou si tu ne peux ` +
+        `pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, ` +
+        `etc.), n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien ` +
+        `d'autre. Ne résume jamais un contenu différent de celui indiqué ci-dessus.`
+      : '';
   return `Résume en français le contenu de ce lien : ${url}.
-Contexte : ${context || 'aucun'}.
+Contexte : ${context || 'aucun'}.${anchor}
 ${buildSummaryFormat()}`;
 }
 
@@ -128,6 +150,7 @@ function parseHermesOutput(stdout, stderr) {
 }
 
 module.exports = {
+  LINK_UNREADABLE_SENTINEL,
   buildAskPrompt,
   buildAskPromptWithContextFile,
   buildLinkPrompt,
