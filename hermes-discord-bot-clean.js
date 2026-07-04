@@ -20,7 +20,7 @@ const {
 } = require('./config');
 const { buildRecapPrompt, extractThemes } = require('./prompts');
 const {
-  extractArticleLinks,
+  extractLinks,
   mentionsUser,
   isReplyTo,
   formatHermesResponse,
@@ -397,13 +397,13 @@ client.on('messageCreate', async (message) => {
   // (see the messageReactionAdd handler below). Auto-summary was removed in issue c8dafc0.
 });
 
-// Summarise the article link(s) in a message and reply with the structured summary. Moved
-// verbatim from the former auto-detect block (issue c8dafc0) so the 📝-reaction handler and
-// any future caller share one flow: 👀 while working, a pending placeholder, up to 3 links,
-// thread-split if long, ✅/❌ at the end, and an admin DM (never a channel reply) on failure.
-// `message` is a full (fetched) Message; `articleLinks` is the non-empty result of
-// extractArticleLinks — the caller has already decided there is something to summarise.
-async function summariseArticleLinks(message, articleLinks) {
+// Summarise the link(s) in a message and reply with the structured summary. Moved verbatim
+// from the former auto-detect block (issue c8dafc0) so the 📝-reaction handler and any future
+// caller share one flow: 👀 while working, a pending placeholder, up to 3 links, thread-split
+// if long, ✅/❌ at the end, and an admin DM (never a channel reply) on failure. `message` is
+// a full (fetched) Message; `links` is the non-empty result of extractLinks — the caller has
+// already decided there is something to summarise.
+async function summariseLinks(message, links) {
   const context = message.content.replace(LINK_PATTERN, '').trim();
 
   let pendingMsg;
@@ -413,8 +413,8 @@ async function summariseArticleLinks(message, articleLinks) {
       "🔄 Je récupère le contenu de l'article et je te fournis un résumé structuré…"
     );
 
-    // Summarize each article link (up to 3)
-    const linksToProcess = articleLinks.slice(0, 3);
+    // Summarize each link (up to 3)
+    const linksToProcess = links.slice(0, 3);
     const summaries = [];
     for (const link of linksToProcess) {
       const summary = await summarizeLink(link, context);
@@ -457,7 +457,7 @@ async function summariseArticleLinks(message, articleLinks) {
     const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
     const guildName = message.guild ? message.guild.name : 'DM';
     const details = [
-      `URL: ${articleLinks[0]}`,
+      `URL: ${links[0]}`,
       `Auteur: ${message.author.tag}`,
       `Salon: ${channelName} (${guildName})`,
       `Lien message: ${message.url}`,
@@ -471,11 +471,12 @@ async function summariseArticleLinks(message, articleLinks) {
   }
 }
 
-// --- 📝 reaction → summarise the message's article link(s) (issue c8dafc0) ---
-// Opt-in replacement for auto-summary: a member reacts 📝 to a message that has an article
-// link and the bot summarises it. No link, or only non-article links (YouTube/Spotify/…) →
-// the bot stays silent. The whole handler is wrapped so a transient fetch failure logs
-// instead of escaping as an unhandled rejection (issue 1ff433a).
+// --- 📝 reaction → summarise the message's link(s) (issues c8dafc0, 71e2200) ---
+// Opt-in summary: a member reacts 📝 to a message that has a link and the bot summarises it —
+// ANY link (article, YouTube, Spotify, …), because a deliberate reaction is itself the "worth
+// summarising" decision (no host denylist). Only a message with no link at all is skipped. The
+// whole handler is wrapped so a transient fetch failure logs instead of escaping as an
+// unhandled rejection (issue 1ff433a).
 client.on('messageReactionAdd', async (reaction, user) => {
   try {
     if (user.bot) return; // ignore the bot's own ✅/❌/👀 reactions
@@ -497,11 +498,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
     // Dedup: several members reacting 📝 summarise the message once.
     if (REACTED_MESSAGES.has(message.id)) return;
 
-    const articleLinks = extractArticleLinks(message.content);
-    if (articleLinks.length === 0) return; // no article link → stay silent
+    const links = extractLinks(message.content);
+    if (links.length === 0) return; // no link → stay silent
 
     rememberReaction(message.id);
-    await summariseArticleLinks(message, articleLinks);
+    await summariseLinks(message, links);
   } catch (error) {
     console.error('Reaction handler error:', error.message);
   }

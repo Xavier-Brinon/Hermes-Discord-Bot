@@ -1,6 +1,6 @@
 // text.js
-// Text/URL helpers the bot uses to shape Hermes output and classify links. The core
-// helpers (unwrapText, splitAtBoundaries, isNonArticleUrl) are pure and unit-tested
+// Text/URL helpers the bot uses to shape Hermes output and pull links out of messages. The
+// core helpers (unwrapText, splitAtBoundaries, extractLinks) are pure and unit-tested
 // (issue 6115cc3). formatHermesResponse + sendLongResponse were added with the
 // modularisation (issue 950dc54): formatHermesResponse is pure; sendLongResponse does
 // Discord I/O (it splits then sends), operating on a duck-typed message object.
@@ -14,31 +14,15 @@ const { messagesFR, DISCORD_MSG_LIMIT, LINK_PATTERN } = require('./config');
 // global regex does not use lastIndex, so this module-level instance is safe to reuse.
 const ALL_LINKS_PATTERN = new RegExp(LINK_PATTERN.source, 'gi');
 
-// URLs that are NOT articles — skip silently (used to filter auto link-summaries).
-// Covers social/video/image hosts, raw media files, and music-streaming/player links
-// (Spotify, Apple Music, SoundCloud, Deezer, Bandcamp, Tidal, Amazon Music, Audiomack).
-// A song is not an article: a Spotify track page is a JS app with no readable body, so
-// summarising one made Hermes hallucinate a made-up track. Skip these like any other
-// media link — the bot stays silent.
-// Reddit is deliberately NOT skipped: post pages ship real text (server HTML + OG tags),
-// and some threads are worth a summary. Image/video-only posts are handled downstream by
-// the content-aware abstain gate (issue 6b1af90), not by blanket-blacklisting the host.
-const NON_ARTICLE_PATTERN =
-  /(youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|facebook\.com|discord\.com|imgur\.com|giphy\.com|tenor\.com|spotify\.(com|link)|music\.apple\.com|soundcloud\.com|deezer\.com|deezer\.page\.link|bandcamp\.com|tidal\.com|music\.amazon\.|audiomack\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi|mp3|wav|ogg)(\?|$))/i;
-
-// True when a URL is a non-article (social/media/image) link the bot should not summarise.
-function isNonArticleUrl(url) {
-  return NON_ARTICLE_PATTERN.test(url);
-}
-
-// The article links in `content`, in order, skipping non-article (social/media/music)
-// URLs. Returns [] when there is no link or every link is a non-article — the 📝-reaction
-// handler reads [] as "no article to summarise, stay silent". Pure; the caller caps how
-// many it actually summarises. See issue c8dafc0.
-function extractArticleLinks(content) {
-  const links = (content || '').match(ALL_LINKS_PATTERN);
-  if (!links) return [];
-  return links.filter((url) => !isNonArticleUrl(url));
+// Every URL in `content`, in order; [] when there is none. No host filter — the 📝-reaction
+// handler summarises whatever a human deliberately reacted to (the reaction IS the "worth
+// summarising" decision), so it reads [] as "no link, stay silent". Pure; the caller caps
+// how many it summarises. The former isNonArticleUrl/NON_ARTICLE_PATTERN denylist (issue
+// e89a541) existed only for the auto-summary path, which is gone (issue c8dafc0) — dropped
+// here so an explicit 📝 on a YouTube/Spotify link is summarised, not silently skipped. See
+// issue 71e2200.
+function extractLinks(content) {
+  return (content || '').match(ALL_LINKS_PATTERN) || [];
 }
 
 // True when the user directly @mentioned `userId` in the message TEXT — i.e. typed
@@ -211,9 +195,7 @@ async function sendLongResponse(message, text) {
 }
 
 module.exports = {
-  NON_ARTICLE_PATTERN,
-  isNonArticleUrl,
-  extractArticleLinks,
+  extractLinks,
   mentionsUser,
   isReplyTo,
   unwrapText,

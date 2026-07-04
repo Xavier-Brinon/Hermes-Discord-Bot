@@ -29,7 +29,7 @@ const MAX_ARGV_PROMPT_BYTES = 96 * 1024;
 // Discord message limit is 2000 chars; we use 1900 to leave margin for formatting.
 const DISCORD_MSG_LIMIT = 1900;
 
-// Link detection. (NON_ARTICLE_PATTERN / isNonArticleUrl live in text.js.)
+// Link detection. (text.js derives a global variant + extractLinks from this.)
 const LINK_PATTERN = /https?:\/\/\S+/i;
 
 // History/summary request detection (French + English).

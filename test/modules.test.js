@@ -20,7 +20,7 @@ test('config — exports constants, paths, patterns, messagesFR', () => {
 
 test('text — exports the text/url helpers including the moved formatHermesResponse/sendLongResponse', () => {
   const t = require('../text');
-  for (const fn of ['unwrapText', 'splitAtBoundaries', 'isNonArticleUrl', 'formatHermesResponse', 'sendLongResponse']) {
+  for (const fn of ['unwrapText', 'splitAtBoundaries', 'extractLinks', 'formatHermesResponse', 'sendLongResponse']) {
     assert.equal(typeof t[fn], 'function', `text.${fn} not a function`);
   }
 });

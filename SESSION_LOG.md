@@ -677,3 +677,43 @@ PASSED. Final diff matches the Pre-Flight commitment: a pure `extractArticleLink
 `.artifacts/reaction-summaries/verification_matrix.md`
 
 10 of 11 matrix subtasks PASS: extractArticleLinks returns article links / drops non-articles / [] on no-link / keeps order / no-throw on empty-null (6 new unit tests, 76/76 total); `SUMMARY_REACTION === '📝'` exported; Partials fixed to the enum + module `node --check` clean; auto-detect block removed (grep confirms); `isNonArticleUrl` orphan import removed (eslint clean); npm test 76/76, eslint 0 errors, prettier clean on changed JS. The 11th (issue lifecycle) is PENDING and lands at merge. Runtime Discord behaviour (react 📝 on a live message) is deferred to the post-deploy check on the VPS — not reproducible from the local checkout.
+
+# Task: reaction-any-link
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: 71e2200 — 📝 reaction summarises any link (drop host denylist); the human's reaction is the filter
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Replace `extractArticleLinks` with a pure `extractLinks(content)` (every URL, [] when none, NO host filter), delete the now-orphaned `NON_ARTICLE_PATTERN` + `isNonArticleUrl`, point the reaction handler at `extractLinks` (silent only on 0 links), and rename `summariseArticleLinks` → `summariseLinks`. I will NOT add a filter-toggle knob, a link-kind classifier, or keep the denylist dormant.
+- **Scope Boundaries:**
+  - In-scope: text.js, hermes-discord-bot-clean.js, test/text.test.js, test/modules.test.js, config.js (one comment)
+  - Out-of-scope: hermes-cli.js, prompts.js, recap.js, cache.js, the @mention/recap handlers, `ALL_LINKS_PATTERN` (kept)
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (delete the dead denylist rather than keep it "just in case"; one 2-line pure fn replaces the pattern + predicate + filtering extractor)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no URL-classification subsystem — one pure fn)
+
+### Assumptions
+`.artifacts/reaction-any-link/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: a 2-line pure `extractLinks(content)` (all URLs, [] when none, no host filter) replaces `extractArticleLinks`; `NON_ARTICLE_PATTERN` + `isNonArticleUrl` deleted; the reaction handler summarises on ≥1 link and stays silent only on 0 links; `summariseArticleLinks` renamed to `summariseLinks`. No filter-toggle knob, no link-kind classifier, no dormant dead code. Net production change is −9 logical LOC (code shrank). Verified by grep before + after that the denylist had exactly one production consumer and that no reference dangles.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — the change REMOVES a subsystem; one 2-line pure fn replaces a regex + predicate + filtering extractor. Net −9 LOC.
+- [ ] **Scope Bleed** — only the 5 declared files + artifacts/SESSION_LOG/METRICS changed. modules.test.js was already prettier-dirty on HEAD (3 unwrapped long-array lines); my 1-word swap on line 23 kept that existing style, so I did NOT reformat it (would bleed into the 2 unrelated test arrays). config.js prettier-dirty pre-existing (apostrophe lines) — untouched.
+- [ ] **Style Drift** — `extractLinks` mirrors the pure-helper style; eslint 0 errors (4 pre-existing warnings, unchanged); prettier clean on text.js/entrypoint/config additions + text.test.js; modules.test.js left in its pre-existing unwrapped style.
+- [ ] **Issue Lifecycle** — comment to be posted before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/reaction-any-link/verification_matrix.md`
+
+8 of 9 matrix subtasks PASS: extractLinks returns all links / silent on no-link / keeps YouTube+Spotify (no filter) / no-throw on empty-null (5 new unit tests); denylist removed (grep: no definition/export/prod-reference, only an explanatory comment); no dangling refs (node --check clean, eslint no-undef clean); handler summarises any link via summariseLinks; npm test 71/71 (was 76; −10 denylist tests +5 extractLinks), eslint 0 errors, prettier clean on changed JS except pre-existing modules.test.js/config.js dirt. The 9th (issue lifecycle) is PENDING and lands at merge. Runtime Discord behaviour (📝 on a YouTube link → summary) verified on deploy.

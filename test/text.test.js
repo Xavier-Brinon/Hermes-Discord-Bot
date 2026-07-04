@@ -6,8 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  isNonArticleUrl,
-  extractArticleLinks,
+  extractLinks,
   mentionsUser,
   isReplyTo,
   unwrapText,
@@ -67,81 +66,41 @@ test('splitAtBoundaries — hard-splits an over-long single paragraph; every chu
   assert.equal(chunks.join(' ').replace(/\s+/g, ' ').trim(), 'abcdefghij klmnop.');
 });
 
-// --- isNonArticleUrl ------------------------------------------------------
+// --- extractLinks ---------------------------------------------------------
+// The 📝-reaction trigger summarises whatever a human reacted to — every link, no host
+// filter — and reads [] as "no link, stay silent" (issues c8dafc0, 71e2200).
 
-test('isNonArticleUrl — social / video / image URLs are non-articles', () => {
-  assert.equal(isNonArticleUrl('https://youtube.com/watch?v=abc'), true);
-  assert.equal(isNonArticleUrl('https://x.com/user/status/1'), true);
-  assert.equal(isNonArticleUrl('https://example.com/photo.jpg'), true);
-});
-
-test('isNonArticleUrl — music-streaming / song links are non-articles (bot stays silent)', () => {
-  // The incident URL: a Spotify track that the bot wrongly summarised.
-  assert.equal(
-    isNonArticleUrl(
-      'https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5?si=T2_CXWiFR9ylRM4JlrKUug'
-    ),
-    true
-  );
-  assert.equal(isNonArticleUrl('https://spotify.link/abc123'), true);
-  assert.equal(isNonArticleUrl('https://music.apple.com/fr/album/x/123'), true);
-  assert.equal(isNonArticleUrl('https://soundcloud.com/artist/track'), true);
-  assert.equal(isNonArticleUrl('https://www.deezer.com/track/123'), true);
-  assert.equal(isNonArticleUrl('https://artist.bandcamp.com/track/song'), true);
-  assert.equal(isNonArticleUrl('https://tidal.com/browse/track/123'), true);
-  assert.equal(isNonArticleUrl('https://music.amazon.fr/albums/ABC'), true);
-});
-
-test('isNonArticleUrl — a plain article URL is an article', () => {
-  assert.equal(isNonArticleUrl('https://lemonde.fr/article/123'), false);
-});
-
-test('isNonArticleUrl — reddit posts are articles (NOT skipped — some are worth a summary)', () => {
-  assert.equal(
-    isNonArticleUrl('https://www.reddit.com/r/france/comments/abc123/titre_du_post/'),
-    false
-  );
-  assert.equal(isNonArticleUrl('https://old.reddit.com/r/programming/comments/xyz/'), false);
-});
-
-// --- extractArticleLinks --------------------------------------------------
-// The 📝-reaction trigger reads [] as "no article to summarise, stay silent" (issue c8dafc0).
-
-test('extractArticleLinks — returns the article link in a message', () => {
-  assert.deepEqual(extractArticleLinks('à lire : https://lemonde.fr/article/123'), [
+test('extractLinks — returns the link in a message', () => {
+  assert.deepEqual(extractLinks('à lire : https://lemonde.fr/article/123'), [
     'https://lemonde.fr/article/123',
   ]);
 });
 
-test('extractArticleLinks — [] when there is no link (stay silent)', () => {
-  assert.deepEqual(extractArticleLinks('bonjour tout le monde'), []);
+test('extractLinks — [] when there is no link (stay silent)', () => {
+  assert.deepEqual(extractLinks('bonjour tout le monde'), []);
 });
 
-test('extractArticleLinks — [] when every link is a non-article (youtube/spotify)', () => {
-  assert.deepEqual(extractArticleLinks('https://youtube.com/watch?v=abc'), []);
-  assert.deepEqual(
-    extractArticleLinks('https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5'),
-    []
-  );
+test('extractLinks — keeps YouTube/Spotify/media links (no host filter)', () => {
+  // The human reacted 📝 deliberately, so these are NOT dropped anymore.
+  assert.deepEqual(extractLinks('https://youtube.com/watch?v=abc'), [
+    'https://youtube.com/watch?v=abc',
+  ]);
+  assert.deepEqual(extractLinks('https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5'), [
+    'https://open.spotify.com/track/0RwtlGnvXFIZ9OuKlAm2F5',
+  ]);
 });
 
-test('extractArticleLinks — returns every article link, in order', () => {
-  assert.deepEqual(extractArticleLinks('un https://lemonde.fr/1 puis https://lefigaro.fr/2'), [
+test('extractLinks — returns every link, in order', () => {
+  assert.deepEqual(extractLinks('un https://lemonde.fr/1 puis https://youtube.com/watch?v=x'), [
     'https://lemonde.fr/1',
-    'https://lefigaro.fr/2',
+    'https://youtube.com/watch?v=x',
   ]);
 });
 
-test('extractArticleLinks — mixed: keeps the article, drops the video', () => {
-  assert.deepEqual(extractArticleLinks('https://lemonde.fr/a et https://youtube.com/watch?v=x'), [
-    'https://lemonde.fr/a',
-  ]);
-});
-
-test('extractArticleLinks — no throw on empty/null/undefined', () => {
-  assert.deepEqual(extractArticleLinks(''), []);
-  assert.deepEqual(extractArticleLinks(null), []);
-  assert.deepEqual(extractArticleLinks(undefined), []);
+test('extractLinks — no throw on empty/null/undefined', () => {
+  assert.deepEqual(extractLinks(''), []);
+  assert.deepEqual(extractLinks(null), []);
+  assert.deepEqual(extractLinks(undefined), []);
 });
 
 // --- mentionsUser ---------------------------------------------------------
