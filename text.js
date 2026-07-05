@@ -183,9 +183,37 @@ async function safeReply(message, content) {
   }
 }
 
+// Discord caps a thread name at 100 characters; this generic title is the fallback when a
+// caller has no descriptive context to offer.
+const DEFAULT_THREAD_TITLE = '📄 Réponse détaillée';
+const THREAD_TITLE_MAX = 100;
+
+// Build a Discord thread title from a raw context string (the triggering question, or a
+// link's embed title). Prefixes 📄, collapses whitespace, and truncates to Discord's 100-char
+// cap with a trailing ellipsis — cutting on a word boundary when there's a late space (mirrors
+// splitAtBoundaries' `> maxLen * 0.6` rule) and iterating by code point (Array.from) so a
+// surrogate-pair emoji is never split in half. Falls back to DEFAULT_THREAD_TITLE when there's
+// no usable context, so a thread always has a title. Pure; unit-tested. See issue a4f5bc2.
+function buildThreadTitle(raw) {
+  const text = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return DEFAULT_THREAD_TITLE;
+  const title = `📄 ${text}`;
+  const chars = Array.from(title); // code points — keeps emoji/surrogate pairs whole
+  if (chars.length <= THREAD_TITLE_MAX) return title;
+  // Reserve one code point for the … ellipsis, then prefer a word boundary if a space sits
+  // past ~60% of the cap, so a normal sentence isn't cut mid-word.
+  let cut = chars.slice(0, THREAD_TITLE_MAX - 1).join('');
+  cut = cut.trimEnd();
+  const lastSpace = cut.lastIndexOf(' ');
+  if (lastSpace > THREAD_TITLE_MAX * 0.6) cut = cut.slice(0, lastSpace).trimEnd();
+  return `${cut}…`;
+}
+
 // Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
-// and post the chunks — directly in a thread, or in a new thread otherwise.
-async function sendLongResponse(message, text) {
+// and post the chunks — directly in a thread, or in a new thread otherwise. `threadTitle`
+// names a freshly-created thread (default keeps the old generic title); callers derive a
+// content-reflecting one via buildThreadTitle (issue a4f5bc2).
+async function sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITLE) {
   if (text.length <= DISCORD_MSG_LIMIT) {
     // Fits in one message — simple reply
     await message.reply(text);
@@ -204,7 +232,7 @@ async function sendLongResponse(message, text) {
 
   // Create a thread and post chunks
   const thread = await message.startThread({
-    name: '📄 Réponse détaillée',
+    name: threadTitle,
     autoArchiveDuration: 60,
   });
 
@@ -222,5 +250,6 @@ module.exports = {
   splitAtBoundaries,
   formatHermesResponse,
   safeReply,
+  buildThreadTitle,
   sendLongResponse,
 };

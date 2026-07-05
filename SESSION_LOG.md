@@ -757,3 +757,43 @@ PASSED. Final diff matches the Pre-Flight commitment: pure `extractLinkMeta(mess
 `.artifacts/embed-anchor-summary/verification_matrix.md`
 
 9 of 11 matrix subtasks PASS (unit-testable): extractLinkMeta reads title/author/provider, matches by url, null on no-embed/no-title, null on no-url-match (no wrong anchor), no-throw on missing shape; buildLinkPrompt meta=null byte-identical, with-meta carries title/author/provider + sentinel + VÉRIFICATION; npm test 79/79 (+8), eslint 0 errors, prettier clean on changed JS. The sentinel→honest-message mapping is code-reviewed + simulated (integration — summarizeLink shells out, not unit-run). The 2 remaining — abstention RELIABILITY (prompt-dependent) and issue lifecycle — are DEPLOY/merge-time: the actual "Hermes abstains on the fairy video" can't be reproduced from the local checkout (no Hermes CLI); verified on the VPS after deploy, eval follow-up noted.
+
+# Task: unique-thread-titles
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: a4f5bc2 — Threads all share the title « 📄 Réponse détaillée » — give each a unique/descriptive title
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One pure `buildThreadTitle(raw)` in text.js (prefix `📄 `, collapse whitespace, truncate to 100 code points via `Array.from` on a word boundary, fall back to the existing static `'📄 Réponse détaillée'`); `sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITLE)` uses it as the thread name; each caller passes its own best source (@mention → stripped question; link → first embed title). I will NOT add a config knob / options object, migrate the French string into config.messagesFR, split into per-caller title builders, or reach for Intl.Segmenter grapheme clustering.
+- **Scope Boundaries:**
+  - In-scope: text.js, hermes-discord-bot-clean.js, test/text.test.js
+  - Out-of-scope: config.js, recap.js + the recap thread block (`:301`), prompts.js, hermes-cli.js, cache.js
+
+### Simplicity Strategy
+STANDARD
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (add an optional param with a default equal to the prior literal; callers opt in; the no-arg path stays behaviourally identical). The word-boundary heuristic mirrors the existing `splitAtBoundaries` idiom (`lastSpace > maxLen * 0.6`).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (one pure string→string fn, not a TitleFormatter config object).
+
+### Assumptions
+`.artifacts/unique-thread-titles/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: one pure `buildThreadTitle(raw)` in text.js (prefix `📄 `, whitespace-collapse, `Array.from` code-point truncation to 100 with a `> maxLen * 0.6` word-boundary cut, fallback to `DEFAULT_THREAD_TITLE`); `sendLongResponse` gained an optional `threadTitle` defaulting to that same literal, so the no-arg path is behaviourally identical; the @mention caller passes `buildThreadTitle(content)`, the link caller passes `buildThreadTitle(extractLinkMeta(message, linksToProcess[0])?.title)`. No config knob, no `messagesFR` migration, no per-caller builders, no Intl.Segmenter — all abstained. Behaviour eyeballed on real French inputs (short → intact; 155-char question → 95-cp clean cut "…systèmes…"; embed title → intact; empty/null → fallback).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one pure fn + one optional param defaulting to the prior literal + two one-line call-site derivations. 17 logical LOC vs 14 target (+21%, under the +25% trigger). No knobs/branches beyond the fallback.
+- [ ] **Scope Bleed** — only the 3 declared production/test files + artifacts/SESSION_LOG/METRICS changed. config.js, recap.js, the recap thread block (`:301`), prompts.js, hermes-cli.js, cache.js all untouched.
+- [ ] **Style Drift** — `buildThreadTitle` mirrors the pure-helper style and reuses `splitAtBoundaries`' `> maxLen * 0.6` word-boundary idiom; eslint 0 errors (4 pre-existing warnings, unchanged); prettier clean on all changed files.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/unique-thread-titles/verification_matrix.md`
+
+10 of 10 matrix subtasks PASS: 6 new unit tests (short passthrough, whitespace collapse, empty/whitespace/null/undefined fallback, ≤100-cp truncation ending `…`, word-boundary cut, emoji-safe `😀…` cut); `sendLongResponse` default-equals-prior-literal + `name:`-reads-param by diff review; two call sites derive from distinct sources; recap `📊 Thèmes — …` block untouched (diff only touches the two call sites + import); npm test 85/85 (+6), eslint 0 errors, prettier clean. The only deploy-time item is the live Discord confirmation that two threads in a channel show distinct titles — integration, not locally reproducible (no Discord client); verified on the VPS after deploy.

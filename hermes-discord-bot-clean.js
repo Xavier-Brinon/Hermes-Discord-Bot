@@ -26,6 +26,7 @@ const {
   isReplyTo,
   formatHermesResponse,
   safeReply,
+  buildThreadTitle,
   sendLongResponse,
 } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
@@ -362,7 +363,8 @@ client.on('messageCreate', async (message) => {
         setSessionId(sessionKey, newSessionId);
       }
 
-      await sendLongResponse(message, formattedResponse);
+      // Name the thread after the question so multiple threads in a channel stay distinct.
+      await sendLongResponse(message, formattedResponse, buildThreadTitle(content));
       await finalizeReaction(message, true);
     } catch (error) {
       console.error('Error:', error);
@@ -425,10 +427,12 @@ async function summariseLinks(message, links) {
 
     const response = summaries.join('\n---\n');
 
-    // If response is too long, delete pending msg and use thread splitter
+    // If response is too long, delete pending msg and use thread splitter. Name the thread
+    // after the first link's embed title (falls back to the generic title with no embed).
     if (response.length > DISCORD_MSG_LIMIT) {
       await pendingMsg.delete();
-      await sendLongResponse(message, response);
+      const threadTitle = buildThreadTitle(extractLinkMeta(message, linksToProcess[0])?.title);
+      await sendLongResponse(message, response, threadTitle);
     } else {
       await pendingMsg.edit(response);
     }

@@ -13,6 +13,7 @@ const {
   unwrapText,
   splitAtBoundaries,
   safeReply,
+  buildThreadTitle,
 } = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
@@ -246,4 +247,39 @@ test('safeReply — swallows a rejected reply (returns null, does not throw)', a
   } finally {
     console.error = original;
   }
+});
+
+// --- buildThreadTitle -----------------------------------------------------
+
+test('buildThreadTitle — short text is prefixed with 📄 and left intact', () => {
+  assert.equal(buildThreadTitle('Comment marche Raft ?'), '📄 Comment marche Raft ?');
+});
+
+test('buildThreadTitle — collapses whitespace/newlines to single spaces', () => {
+  assert.equal(buildThreadTitle('Para un.\n\n  Para deux.'), '📄 Para un. Para deux.');
+});
+
+test('buildThreadTitle — empty/whitespace/null/undefined fall back to the generic title', () => {
+  const fallback = '📄 Réponse détaillée';
+  assert.equal(buildThreadTitle(''), fallback);
+  assert.equal(buildThreadTitle('   '), fallback);
+  assert.equal(buildThreadTitle(null), fallback);
+  assert.equal(buildThreadTitle(undefined), fallback);
+});
+
+test('buildThreadTitle — a long title truncates to ≤ 100 code points ending with …', () => {
+  const result = buildThreadTitle('mot '.repeat(40)); // 160 chars of "mot "
+  assert.ok(Array.from(result).length <= 100, 'stays within Discord 100-char cap');
+  assert.ok(result.endsWith('…'), 'ends with an ellipsis');
+});
+
+test('buildThreadTitle — truncates on a word boundary (no mid-word cut)', () => {
+  const result = buildThreadTitle('mot '.repeat(40));
+  assert.ok(result.endsWith('mot…'), 'the cut lands after a complete word');
+});
+
+test('buildThreadTitle — never splits a surrogate-pair emoji when truncating', () => {
+  const result = buildThreadTitle('😀'.repeat(100)); // 100 code points of emoji, over the cap
+  assert.ok(Array.from(result).length <= 100, 'stays within cap');
+  assert.ok(result.endsWith('😀…'), 'last kept char is a whole emoji, not half a surrogate pair');
 });
