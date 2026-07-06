@@ -1,7 +1,7 @@
 # Hermes Discord Bot — Le Mistral Bot
 
 French-language Discord bot powered by the Hermes Agent CLI. Answers `@mentions`
-and DMs in French, summarises article links, and produces channel recaps.
+and DMs in French, summarises links on a 📝 reaction, and produces channel recaps.
 
 This repo adopts the **`@YackShavingSkill`** framework (vendored locally:
 `skills/ examples/ templates/ tools/ schemas/`). The framework master rules are
@@ -15,11 +15,11 @@ links on demand.
 
 - **Single entrypoint:** `hermes-discord-bot-clean.js` (discord.js v14).
 - **CLI-wrapper, not an API client.** The bot talks to Hermes by shelling out to
-  the `hermes` binary with `execFile` and **parsing its terminal output** (the
-  `⚕ Hermes` banner and `──` rule). Any change to that CLI's formatting can break
-  answer extraction — treat the parser as a coupling point.
+  the `hermes` binary with `execFile` in **`-Q` programmatic mode** and parsing
+  its final-response output via `parseHermesOutput`. Any change to that `-Q`
+  output format can break answer extraction — treat the parser as a coupling point.
 - **Three message flows:** (1) `@mention`/DM Q&A, (2) channel recap → theme list
-  in a thread, (3) auto link-summary when an article URL is posted.
+  in a thread, (3) opt-in link summary when a user reacts 📝 to a message with a link.
 - **State on disk:** a link cache and a session cache (for conversation
   continuity) persisted under the workspace dir.
 

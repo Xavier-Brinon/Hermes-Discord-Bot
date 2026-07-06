@@ -879,3 +879,45 @@ PASSED. Final diff matches the Pre-Flight commitment exactly: `hermes_watchdog.s
 `.artifacts/retire-watchdog/verification_matrix.md`
 
 9 of 11 matrix subtasks PASS: both scripts staged-deleted; no dangling references except the intentional README retirement note; both README recovery sections rewritten around `./manage_hermes.sh start`; project tree + troubleshooting + watch-point + maintenance lines fixed; CONTEXT harness line corrected; `bash -n manage_hermes.sh` OK (untouched); npm test 86/86, eslint 0 errors. The 2 PENDING (decision recorded; issue lifecycle) are merge-time — the lifecycle comment precedes `rad issue state --solved`. Note: the issue's own AC1 (auto-boot after reboot) and AC2 (auto-restart the supervisor) are ENVIRONMENT-BLOCKED — unreachable in a managed sandbox with no controllable boot hook (proven on the VPS); recorded as a finding, not silently dropped.
+
+# Task: stale-doc-refs
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: 06e0595 — docs: fix stale CONTEXT/CLAUDE refs — -Q parsing, 📝-reaction summaries, deleted denylist
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Correct exactly the four verified-stale claims in place — CONTEXT.md "Link summary" (📝-reaction opt-in on ANY link, no denylist) + rename "Banner parsing" → "Output parsing (`-Q`)"; CLAUDE.md summary line, CLI-wrapper bullet (`-Q` + `parseHermesOutput`), and three-flows line (📝-reaction). I will NOT touch any .js (the code is correct — the docs lied), README.md/hermes-discord-bot.md (already accurate), or reformat CONTEXT.md's pre-existing prettier dirt.
+- **Scope Boundaries:**
+  - In-scope: CONTEXT.md, CLAUDE.md
+  - Out-of-scope: all .js, README.md, hermes-discord-bot.md
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (each edit corrects exactly one false statement; the rest of both files untouched; grep-swept for the full extent first so I fix all four, not just the one I noticed).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no restructuring, no code change, no drive-by reformat).
+
+### Assumptions
+`.artifacts/stale-doc-refs/pre_computation_block.md`
+
+*(5 assumptions, all HIGH, each code-verified: NON_ARTICLE_PATTERN is a tombstone comment; -Q pushed at hermes-cli.js:95/156; prompts.js:122 says "no ⚕ Hermes banner"; reaction handler at :486; README/hermes-discord-bot.md carry no stale terms.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment exactly: CONTEXT.md "Link summary" reworded to 📝-reaction (`SUMMARY_REACTION`) opt-in on any link with "no host denylist, no auto-summary on post"; "Banner parsing" renamed "Output parsing (`-Q`)" describing `parseHermesOutput` (the sole surviving `⚕ Hermes` mention is the intentional "no banner" negation); CLAUDE.md summary line, CLI-wrapper bullet, and three-flows line corrected to `-Q` + 📝-reaction. 7 insertions / 7 deletions, 2 markdown files, zero code LOC. No .js / README / hermes-discord-bot.md touched; CONTEXT.md prettier dirt left as orthogonal — all abstained.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — docs-only; 0 code LOC; corrected exactly the 4 verified-stale claims, no restructuring.
+- [ ] **Scope Bleed** — only CONTEXT.md + CLAUDE.md changed (+ artifacts/SESSION_LOG/METRICS). README, hermes-discord-bot.md, all .js untouched.
+- [ ] **Style Drift** — new prose matches the existing glossary/bullet style; pre-existing prettier dirt left untouched; npm test 86/86 (no code touched).
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/stale-doc-refs/verification_matrix.md`
+
+8 of 9 matrix subtasks PASS: all four doc spots corrected; grep-sweep confirms no surviving NON_ARTICLE_PATTERN / "auto link-summary" / "article URL" reference; each new statement matches the code (5/5 PCB verifications PASS); .js untouched, npm test 86/86. The 1 PENDING (issue lifecycle) is merge-time — the lifecycle comment precedes `rad issue state --solved`.
