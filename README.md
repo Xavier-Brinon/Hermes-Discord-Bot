@@ -15,8 +15,6 @@ French-language Discord bot powered by Hermes Agent. Answers @mentions in French
 /data/workspace/
 ├── hermes-discord-bot-clean.js   # Main bot code
 ├── manage_hermes.sh              # Canonical management script (start/stop/restart/status/logs)
-├── hermes_watchdog.sh            # Automatic supervision (checks PM2 every 60s)
-├── start_after_reboot.sh         # Post-reboot startup
 ├── test-token.js                 # Discord token test utility
 ├── package.json                  # npm configuration
 ├── .env                          # Encrypted variables (dotenvx)
@@ -81,8 +79,9 @@ confirm a reply in French.
 - **Secrets**: always go through `manage_hermes.sh` (which wraps
   `npx dotenvx run`). `.env.keys` must be present on the VPS, otherwise
   decryption fails at startup.
-- **Watchdog**: after a crash loop, the watchdog gives up after 5 consecutive
-  restarts. Watch the logs right after a redeployment.
+- **Restarts**: PM2 auto-restarts the bot on crash. A climbing `↺` count in
+  `./manage_hermes.sh status` means a crash loop — watch the logs right after a
+  redeployment.
 - **One-way street**: the VPS *pulls* the code (`git pull`); we never push to
   `/data/workspace`. The canonical source stays Radicle + `origin`.
 
@@ -97,19 +96,33 @@ git reset --hard <sha>        # go back to the stable commit
 
 ## After a reboot
 
+The bot runs in a **managed Docker sandbox**. A container restart or recreate
+kills every process — PM2 included — and re-runs the platform entrypoint, which
+does **not** start the bot. The sandbox exposes no boot hook we control, so
+recovery is one manual command:
+
 ```bash
-/data/workspace/start_after_reboot.sh
+cd /data/workspace
+./manage_hermes.sh start
 ```
 
-This script launches the watchdog (automatic supervision) then starts the bot.
+Everything the bot needs (code, `node_modules`, `.env`, `.env.keys`) lives on the
+persistent `/data` volume, so `start` works immediately on a fresh container.
 
 ## Automatic recovery
 
-The watchdog (`hermes_watchdog.sh`):
-- Checks the bot's state via `pm2 list` every 60 seconds
-- Restarts automatically on a crash
-- Gives up after 5 consecutive restarts (manual intervention required)
-- Logs to `/data/workspace/hermes_watchdog.log`
+- **Bot crash, container alive:** PM2 restarts the process automatically — no
+  action needed. This is the common case.
+- **Container restart or recreate:** not automatic — run `./manage_hermes.sh start`
+  (above). Full hands-off recovery isn't reachable inside a managed sandbox: any
+  in-container supervisor would itself need something to start it at boot, and
+  only the platform can do that.
+
+There is deliberately **no bash watchdog**. The former `hermes_watchdog.sh`
+duplicated PM2's own crash-restart, ran unsupervised (nothing restarted it if it
+died), and could not survive a container recreate — so it was retired.
+`manage_hermes.sh` keeps PM2's saved process list current via `pm2 save` on every
+start/restart.
 
 ## Security
 
@@ -124,11 +137,11 @@ The watchdog (`hermes_watchdog.sh`):
 |---|---|
 | Bot does not respond | `./manage_hermes.sh status` |
 | Token error | `npx dotenvx get DISCORD_BOT_TOKEN` |
-| Watchdog silent | `tail -f /data/workspace/hermes_watchdog.log` |
+| Bot down after a container restart | `./manage_hermes.sh start` |
 | PM2 corrupted | `npx pm2 kill && ./manage_hermes.sh start` |
 
 ## Maintenance
 
-- **Logs**: `./manage_hermes.sh logs` or `tail -f /data/workspace/hermes_watchdog.log`
+- **Logs**: `./manage_hermes.sh logs`
 - **Update dependencies**: `npm update`
 - **Responsiveness test**: Mention @Le Mistral Bot in Discord

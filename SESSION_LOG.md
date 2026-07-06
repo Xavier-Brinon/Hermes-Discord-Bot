@@ -837,3 +837,45 @@ PASSED. Final diff matches the Pre-Flight commitment: `buildLinkPrompt`'s empty 
 `.artifacts/no-embed-abstain/verification_matrix.md`
 
 9 of 10 matrix subtasks PASS (unit-testable): no-embed prompt includes the sentinel + "Si tu ne peux pas accéder au contenu réel" and carries the summary format; no VÉRIFICATION/identifié language in the no-meta path; meta=null byte-identical to omitted meta; the updated byte-identical test + the new abstain-path test both green; meta-present path unchanged; one sentinel reused; npm test 86/86 (+1); eslint 0 errors; prettier clean. The 1 remaining — issue lifecycle — is merge-time (comment precedes `rad issue state --solved`). Prompt-side abstention RELIABILITY stays prompt-dependent and lives in eval issue dbf02a1 — not reproducible from the local checkout (no Hermes CLI).
+
+# Task: retire-watchdog
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: c226bf1 — Supervise or retire the bash watchdog (pm2 startup systemd) — it is itself unsupervised
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Retire the bash watchdog by DELETING `hermes_watchdog.sh` + `start_after_reboot.sh`, and rewrite the README "After a reboot" / "Automatic recovery" sections + the CONTEXT "The harness" line to the honest recovery model: PM2 restarts the bot on crash; a container restart/recreate needs one manual `./manage_hermes.sh start` because the managed sandbox exposes no boot hook we control. I will NOT add a `resurrect` subcommand, a boot script, a systemd/upstart unit, pm2-logrotate, or any change to manage_hermes.sh / package.json / the bot's .js.
+- **Scope Boundaries:**
+  - In-scope: hermes_watchdog.sh (delete), start_after_reboot.sh (delete), README.md, CONTEXT.md
+  - Out-of-scope: manage_hermes.sh, package.json, all .js modules, the entrypoint /app/u4s-hermes-agent, test/, evals/
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (change only what the decision needs — delete the two ops scripts + fix exactly the docs that named them; the stale `NON_ARTICLE_PATTERN` in CONTEXT.md is left for its own change).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no new resurrect subcommand / boot script / supervision object — the fix is pure subtraction).
+
+### Assumptions
+`.artifacts/retire-watchdog/pre_computation_block.md`
+
+*(6 assumptions, all HIGH, each backed by an on-VPS verification: PID 1 = tini, no systemd, a real recreate `d715964579bc`→`8100849eb114` left the bot down with the PM2 daemon absent, and the watchdog log was 11 days stale.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment exactly: `hermes_watchdog.sh` (−46) and `start_after_reboot.sh` (−22) deleted; README's "After a reboot" + "Automatic recovery" rewritten to PM2-crash-restart + manual `./manage_hermes.sh start` + the no-boot-hook reality, with the two scripts dropped from the project tree and the "Watchdog silent" troubleshooting row / watchdog watch-point / watchdog-log maintenance line replaced; CONTEXT.md "The harness" glossary line corrected to PM2 + dotenvx. Zero new logical LOC — the best fix was removal. No `resurrect` subcommand, no boot script, no systemd unit, no pm2-logrotate, no manage_hermes.sh/package.json/.js change — all abstained. The empirical basis (real recreate → bot down, no auto-recovery) was proven on the box, correcting an earlier false-positive that a soft "restart" — which never cycled the PM2 daemon (bot uptime stayed continuous) — had suggested.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — 0 new logical LOC; 68 bash lines deleted; no new script/subcommand/knob/unit. Every tempting addition (resurrect verb, boot hook, logrotate) explicitly abstained.
+- [ ] **Scope Bleed** — only the 4 declared files changed (+ artifacts/SESSION_LOG/METRICS). manage_hermes.sh, package.json, all .js untouched; the pre-existing prettier dirt and the stale `NON_ARTICLE_PATTERN` line left as orthogonal.
+- [ ] **Style Drift** — added README table row matches the existing unpadded style; README/CONTEXT were already prettier-dirty on HEAD and left untouched (config.js precedent); eslint 0 errors; npm test 86/86.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + merge SHA + verification + the retire-vs-supervise decision + the two environment-blocked ACs); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/retire-watchdog/verification_matrix.md`
+
+9 of 11 matrix subtasks PASS: both scripts staged-deleted; no dangling references except the intentional README retirement note; both README recovery sections rewritten around `./manage_hermes.sh start`; project tree + troubleshooting + watch-point + maintenance lines fixed; CONTEXT harness line corrected; `bash -n manage_hermes.sh` OK (untouched); npm test 86/86, eslint 0 errors. The 2 PENDING (decision recorded; issue lifecycle) are merge-time — the lifecycle comment precedes `rad issue state --solved`. Note: the issue's own AC1 (auto-boot after reboot) and AC2 (auto-restart the supervisor) are ENVIRONMENT-BLOCKED — unreachable in a managed sandbox with no controllable boot hook (proven on the VPS); recorded as a finding, not silently dropped.
