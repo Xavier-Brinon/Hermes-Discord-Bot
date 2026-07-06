@@ -43,9 +43,10 @@ test('buildAskPromptWithContextFile — @file: token is preceded by whitespace (
   assert.match(out, / @file:ctx\.txt$/);
 });
 
-test('buildLinkPrompt — byte-identical, context provided (uses the shared summary format)', () => {
+test('buildLinkPrompt — no meta: summary format + title-free abstain clause (issue de52e4a)', () => {
   const expected = `Résume en français le contenu de ce lien : http://x.
 Contexte : un test.
+Si tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, etc.), n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien d'autre.
 Structure ta réponse en français, en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping), ainsi :
 Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
 **Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
@@ -61,6 +62,20 @@ test('buildLinkPrompt — empty context falls back to "aucun"', () => {
 
 test('buildLinkPrompt — embeds the shared buildSummaryFormat()', () => {
   assert.ok(buildLinkPrompt('http://x', 'ctx').includes(buildSummaryFormat()));
+});
+
+// --- buildLinkPrompt no-embed abstain (issue de52e4a) ----------------------
+
+test('buildLinkPrompt — no meta grants the abstain sentinel (no-embed links can abstain)', () => {
+  const prompt = buildLinkPrompt('http://x', 'ctx');
+  // a no-embed 📝-reacted link may now abstain instead of fabricating a summary
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL), 'no-embed path must permit abstention');
+  assert.match(prompt, /Si tu ne peux pas accéder au contenu réel/);
+  // nothing to match against → no identity / VÉRIFICATION language (would risk false abstentions)
+  assert.doesNotMatch(prompt, /VÉRIFICATION OBLIGATOIRE/);
+  assert.doesNotMatch(prompt, /identifié/);
+  // a readable article is still summarised — the shared summary format stays present
+  assert.ok(prompt.includes(buildSummaryFormat()));
 });
 
 // --- buildLinkPrompt with the embed anchor (issue 1b94451) -----------------

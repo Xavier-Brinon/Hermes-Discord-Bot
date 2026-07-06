@@ -61,9 +61,17 @@ const LINK_UNREADABLE_SENTINEL = 'CONTENU_INACCESSIBLE';
 // (from the Discord embed: { title, author, provider }) is present, it becomes a ground-truth
 // anchor — Hermes must confirm what it fetched matches that title/author before summarising,
 // else emit LINK_UNREADABLE_SENTINEL. This stops it hallucinating a different video/page when
-// the link (e.g. a YouTube URL) isn't readable via -t web. meta=null is byte-identical to the
-// former prompt. See issue 1b94451.
+// the link (e.g. a YouTube URL) isn't readable via -t web. With meta=null there's no identity
+// to match, but the abstain permission still holds — the prompt grants the same sentinel for a
+// plainly-unreadable page, so a no-embed link can abstain too. See issues 1b94451, de52e4a.
 function buildLinkPrompt(url, context, meta = null) {
+  // Abstain-or-fabricate guard: rather than invent a summary of a page it couldn't read,
+  // Hermes must reply with the sentinel (summarizeLink maps it → messagesFR.linkUnreadable).
+  // Shared so the two branches emit the instruction identically and never drift. See de52e4a.
+  const abstain = `n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien d'autre.`;
+  // With embed meta (a known title/author) the clause ALSO demands the fetched content match
+  // that identity; without meta there's nothing to match, so it's a bare "can't read it →
+  // abstain" — the abstain permission is unconditional, not gated on having a title (de52e4a).
   const anchor =
     meta && meta.title
       ? `\nCe lien est identifié (via ses métadonnées Discord) comme : « ${meta.title} »` +
@@ -72,9 +80,9 @@ function buildLinkPrompt(url, context, meta = null) {
         `VÉRIFICATION OBLIGATOIRE avant de résumer : le contenu que tu récupères doit ` +
         `correspondre à CE titre et à CET auteur. Si ce n'est pas le cas, ou si tu ne peux ` +
         `pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, ` +
-        `etc.), n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien ` +
-        `d'autre. Ne résume jamais un contenu différent de celui indiqué ci-dessus.`
-      : '';
+        `etc.), ${abstain} Ne résume jamais un contenu différent de celui indiqué ci-dessus.`
+      : `\nSi tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans ` +
+        `transcription accessible, etc.), ${abstain}`;
   return `Résume en français le contenu de ce lien : ${url}.
 Contexte : ${context || 'aucun'}.${anchor}
 ${buildSummaryFormat()}`;

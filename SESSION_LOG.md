@@ -797,3 +797,43 @@ PASSED. Final diff matches the Pre-Flight commitment: one pure `buildThreadTitle
 `.artifacts/unique-thread-titles/verification_matrix.md`
 
 10 of 10 matrix subtasks PASS: 6 new unit tests (short passthrough, whitespace collapse, empty/whitespace/null/undefined fallback, ≤100-cp truncation ending `…`, word-boundary cut, emoji-safe `😀…` cut); `sendLongResponse` default-equals-prior-literal + `name:`-reads-param by diff review; two call sites derive from distinct sources; recap `📊 Thèmes — …` block untouched (diff only touches the two call sites + import); npm test 85/85 (+6), eslint 0 errors, prettier clean. The only deploy-time item is the live Discord confirmation that two threads in a channel show distinct titles — integration, not locally reproducible (no Discord client); verified on the VPS after deploy.
+
+# Task: no-embed-abstain
+complexity_score: 2
+complexity_tier: STANDARD
+
+Radicle issue: de52e4a — 📝 summary: abstain clause is gated on an embed title — no-embed links can't abstain
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Fill `buildLinkPrompt`'s empty anchor `else` branch with a title-free abstain clause ("Si tu ne peux pas accéder au contenu réel (…), n'invente rien : réponds UNIQUEMENT par CONTENU_INACCESSIBLE et rien d'autre."), and hoist that one sentinel sentence into a shared `abstain` const so the meta and no-meta branches never drift. The meta-present branch stays byte-identical. I will NOT add a second sentinel, a config knob, a placeholder identity anchor, a bot-side heuristic, or any change to hermes-cli.js / config.js.
+- **Scope Boundaries:**
+  - In-scope: prompts.js, test/prompts.test.js
+  - Out-of-scope: hermes-cli.js, config.js, hermes-discord-bot-clean.js, buildAskPrompt @mention path, text.js, recap.js, cache.js, evals/
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (fill one empty branch + extract one shared sentence; the meta path stays byte-identical, no signature change, no new subsystem)
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (no verification object, no second sentinel, no config knob — one shared const + one filled branch)
+
+### Assumptions
+`.artifacts/no-embed-abstain/pre_computation_block.md`
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment: `buildLinkPrompt`'s empty anchor `else` branch now emits a title-free abstain clause ("Si tu ne peux pas accéder au contenu réel (…), " + a shared `abstain` const naming `CONTENU_INACCESSIBLE`), and the same `abstain` const is spliced into the meta-present branch where the literal used to be — so that branch stays byte-identical (node eyeball confirms; the meta-path tests pass untouched). No second sentinel, no config knob, no placeholder identity anchor, no bot-side heuristic, no hermes-cli.js/config.js change — all abstained. Generated prompts eyeballed: no-meta carries the abstain line + summary format and NO VÉRIFICATION language; meta carries title/author/provider + VÉRIFICATION + sentinel exactly as before.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — one shared `abstain` const + one filled else branch; meta path byte-identical. 14 logical LOC vs 12 target (+16.7%, under the +25% trigger). Second sentinel / knob / bot-side heuristic explicitly deferred.
+- [ ] **Scope Bleed** — only the 2 declared production/test files changed (+ artifacts/SESSION_LOG/METRICS). hermes-cli.js, config.js, hermes-discord-bot-clean.js, the @mention summary path, text.js, recap.js, cache.js all untouched.
+- [ ] **Style Drift** — the shared-const + anchor-ternary shape mirrors the existing idiom; the stale "meta=null is byte-identical to the former prompt" doc-comment was corrected in the same edit; eslint 0 errors, prettier clean on changed files.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + merge SHA + verification); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/no-embed-abstain/verification_matrix.md`
+
+9 of 10 matrix subtasks PASS (unit-testable): no-embed prompt includes the sentinel + "Si tu ne peux pas accéder au contenu réel" and carries the summary format; no VÉRIFICATION/identifié language in the no-meta path; meta=null byte-identical to omitted meta; the updated byte-identical test + the new abstain-path test both green; meta-present path unchanged; one sentinel reused; npm test 86/86 (+1); eslint 0 errors; prettier clean. The 1 remaining — issue lifecycle — is merge-time (comment precedes `rad issue state --solved`). Prompt-side abstention RELIABILITY stays prompt-dependent and lives in eval issue dbf02a1 — not reproducible from the local checkout (no Hermes CLI).
