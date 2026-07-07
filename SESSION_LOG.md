@@ -921,3 +921,45 @@ PASSED. Final diff matches the Pre-Flight commitment exactly: CONTEXT.md "Link s
 `.artifacts/stale-doc-refs/verification_matrix.md`
 
 8 of 9 matrix subtasks PASS: all four doc spots corrected; grep-sweep confirms no surviving NON_ARTICLE_PATTERN / "auto link-summary" / "article URL" reference; each new statement matches the code (5/5 PCB verifications PASS); .js untouched, npm test 86/86. The 1 PENDING (issue lifecycle) is merge-time — the lifecycle comment precedes `rad issue state --solved`.
+
+# Task: summary-retry-guard
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: 5a8db57 — bug: 📝 summary is marked done before the attempt — a failed summary can't be retried
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Split the one "done" set into `REACTED_MESSAGES` (added only after a successful summary) + a transient `SUMMARISING_MESSAGES` in-flight set (added in the guard, removed in a `finally`); make `summariseLinks` return `true`/`false`; isolate each per-link `summarizeLink` in its own try so one bad link doesn't discard the successes. I will NOT rethrow from `summariseLinks` (keep its silent-fail contract), add a two-state marker/Map (Option A), bound the in-flight set, or touch hermes-cli.js / config.js / the 4 pre-existing empty-catch warnings (cb42d9b).
+- **Scope Boundaries:**
+  - In-scope: hermes-discord-bot-clean.js
+  - Out-of-scope: hermes-cli.js, config.js, prompts.js, text.js, recap.js, cache.js, test/*.test.js
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (change only the dedup placement + per-link isolation the two ACs need; the summary flow, message text, and 3-link cap stay byte-identical — the fix is a mark-on-success move plus a per-iteration try, nothing else).
+- Anti-Pattern avoided: `examples/anti-patterns/bloated-loop.md` (no ghost retry-counter flag, no defensive re-loop — the per-link try just collects successes and remembers the first error for the admin DM).
+
+### Assumptions
+`.artifacts/summary-retry-guard/pre_computation_block.md`
+
+*(6 assumptions — 5 HIGH, 1 MEDIUM. All 4 verifications PASS: `summariseLinks` has a single caller (:511), its catch never rethrows, npm test 86/86 baseline, eslint 0 errors / 4 known warnings. The MEDIUM is the design choice that a PARTIAL success counts as done — not retryable — which AC3 permits.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final diff matches the Pre-Flight commitment exactly: added a transient `SUMMARISING_MESSAGES` Set beside the existing `REACTED_MESSAGES` bounded-FIFO; the handler guard now returns on `REACTED ‖ SUMMARISING`, adds the id to `SUMMARISING` (check-and-set atomic — only sync `extractLinks`+`if` between), and marks done via `rememberReaction` ONLY when `summariseLinks` returns truthy, in a `try/finally` that always drains the in-flight id; `summariseLinks` now isolates each `summarizeLink` in its own try (logging + keeping the first error), throws only if EVERY link failed, and returns `true`/`false` so the caller can tell success from failure. 14 net logical LOC = Target (delta 0%). Abstained: the two-state Map/marker (Option A), a rethrow-and-recatch, retry-failed-links-only, a FIFO bound on the in-flight set, and an admin DM on partial failure. No hermes-cli.js / config.js / test / other-file touch; the 4 pre-existing empty-catch warnings (cb42d9b) left alone.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — 14 net logical LOC = Target (0%); one Set + one per-link try + a boolean return. No state machine, no retry counter, no knob — all abstained.
+- [ ] **Scope Bleed** — only `hermes-discord-bot-clean.js` changed (+ artifacts/SESSION_LOG/METRICS). hermes-cli.js, config.js, prompts.js, the tests, cb42d9b's warnings all untouched.
+- [ ] **Style Drift** — mirrors the existing bounded-set + try/catch idiom; eslint exit 0 (4 pre-existing warnings unchanged, 0 new — `catch (err)` consumes `err`); prettier clean on the changed file.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + merge SHA + verification + the 3 ACs); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/summary-retry-guard/verification_matrix.md`
+
+9 of 10 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time — the lifecycle comment precedes `rad issue state --solved`. AC1/AC2/AC3 are exercised by an executable model (`scratchpad/guard-model.mjs`) that faithfully transcribes the guard + `summariseLinks` control flow — the entrypoint hosts the handler with no `module.exports` + `client.login` at load, so it is not live-drivable here (extracting the guard into a testable module is a separate testability refactor, logged as orthogonal). Model asserts all pass: (AC1) a `false` result leaves the id un-remembered → the re-reaction retries and posts; (AC2) two concurrent reactions with an in-flight summary → exactly one `summariseLinks` call; (AC3) a middle-link throw posts only the 2 successes and marks done, while all-links-fail posts nothing and stays retryable. Static checks: `summariseLinks` single caller; catch body byte-identical + `return false` appended; npm test 86/86; eslint 0 errors / 4 unchanged warnings; prettier clean.

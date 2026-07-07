@@ -63,6 +63,12 @@ function rememberReaction(id) {
   }
 }
 
+// A summary runs async, so a second member can react 📝 before it finishes. Track the ids
+// whose summary is CURRENTLY running so a concurrent reaction is a no-op — WITHOUT marking the
+// message permanently done. Done (REACTED_MESSAGES) is set only on success, so a failed summary
+// can still be retried by re-reacting (issue 5a8db57). Transient — no FIFO bound needed.
+const SUMMARISING_MESSAGES = new Set();
+
 // Server restriction is required — refuse to start without it.
 if (!ALLOWED_GUILD_ID) {
   console.error(
@@ -420,10 +426,21 @@ async function summariseLinks(message, links) {
     // Hermes verifies it read the right content before summarising (issue 1b94451).
     const linksToProcess = links.slice(0, 3);
     const summaries = [];
+    let firstError;
     for (const link of linksToProcess) {
-      const summary = await summarizeLink(link, context, extractLinkMeta(message, link));
-      summaries.push(summary);
+      try {
+        const summary = await summarizeLink(link, context, extractLinkMeta(message, link));
+        summaries.push(summary);
+      } catch (err) {
+        // Isolate each link: one unreadable link must not discard the summaries that
+        // succeeded (issue 5a8db57). Keep the first error for the admin DM if all fail.
+        console.error(`Résumé de lien échoué (${link}):`, err.message);
+        if (!firstError) firstError = err;
+      }
     }
+
+    // Every link failed → nothing to post; fall through to the failure/cleanup path.
+    if (summaries.length === 0) throw firstError;
 
     const response = summaries.join('\n---\n');
 
@@ -441,6 +458,7 @@ async function summariseLinks(message, links) {
     setCachedLink(message.channel.id, linksToProcess[0]);
 
     await finalizeReaction(message, true);
+    return true;
   } catch (error) {
     console.error('Link summary error:', error);
 
@@ -474,6 +492,7 @@ async function summariseLinks(message, links) {
       .filter(Boolean)
       .join('\n');
     notifyAdmin('Résumé de lien échoué', details);
+    return false;
   }
 }
 
@@ -501,14 +520,21 @@ client.on('messageReactionAdd', async (reaction, user) => {
     // Guild restriction — the feature is server-only; a 📝 in a DM has no guild.
     if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID) return;
 
-    // Dedup: several members reacting 📝 summarise the message once.
-    if (REACTED_MESSAGES.has(message.id)) return;
+    // Dedup: a message is marked done (REACTED_MESSAGES) only after a SUCCESSFUL summary, so a
+    // failed 📝 can be retried by re-reacting; SUMMARISING_MESSAGES separately collapses two
+    // near-simultaneous reactions into one summary while it runs (issue 5a8db57). The check and
+    // the add below are separated only by synchronous code, so check-and-set is atomic.
+    if (REACTED_MESSAGES.has(message.id) || SUMMARISING_MESSAGES.has(message.id)) return;
 
     const links = extractLinks(message.content);
     if (links.length === 0) return; // no link → stay silent
 
-    rememberReaction(message.id);
-    await summariseLinks(message, links);
+    SUMMARISING_MESSAGES.add(message.id);
+    try {
+      if (await summariseLinks(message, links)) rememberReaction(message.id);
+    } finally {
+      SUMMARISING_MESSAGES.delete(message.id);
+    }
   } catch (error) {
     console.error('Reaction handler error:', error.message);
   }
