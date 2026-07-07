@@ -963,3 +963,48 @@ PASSED. Final diff matches the Pre-Flight commitment exactly: added a transient 
 `.artifacts/summary-retry-guard/verification_matrix.md`
 
 9 of 10 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time — the lifecycle comment precedes `rad issue state --solved`. AC1/AC2/AC3 are exercised by an executable model (`scratchpad/guard-model.mjs`) that faithfully transcribes the guard + `summariseLinks` control flow — the entrypoint hosts the handler with no `module.exports` + `client.login` at load, so it is not live-drivable here (extracting the guard into a testable module is a separate testability refactor, logged as orthogonal). Model asserts all pass: (AC1) a `false` result leaves the id un-remembered → the re-reaction retries and posts; (AC2) two concurrent reactions with an in-flight summary → exactly one `summariseLinks` call; (AC3) a middle-link throw posts only the 2 successes and marks done, while all-links-fail posts nothing and stays retryable. Static checks: `summariseLinks` single caller; catch body byte-identical + `return false` appended; npm test 86/86; eslint 0 errors / 4 unchanged warnings; prettier clean.
+
+
+---
+
+# Task: reaction-lifecycle
+complexity_score: 3
+complexity_tier: STANDARD
+
+Radicle issue: ffed210 — bug: 📝 reaction lifecycle — reliable 👀 removal, ✅/⚠️/❌ outcome, drop 📝 to re-arm retry
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Turn `finalizeReaction(message, success)` into `finalizeReaction(message, resultEmoji)` — a dumb helper that hydrates the cache only if empty (`message.fetch()`), sweeps every `r.me` reaction (👀 + any stale ✅/⚠️/❌), then adds the passed emoji. Update the 6 call sites to pass explicit emoji; detect abstention in `summariseLinks` (`abstained ? '⚠️' : '✅'`, all summaries === `messagesFR.linkUnreadable`); route its catch through `finalizeReaction(message, '❌')` (deleting the manual `r.me` loop); on a `false` return the handler best-effort drops the triggering 📝 (`reaction.users.remove(user.id)` in `catch {}`). I will NOT add a 3-value return token, named emoji constants, a dual-type (boolean|emoji) `finalizeReaction`, a `.me`-race poll, an abstention admin-DM, or do cb42d9b's empty-catch cleanup; I will not touch hermes-cli.js / config.js / tests.
+- **Scope Boundaries:**
+  - In-scope: hermes-discord-bot-clean.js
+  - Out-of-scope: hermes-cli.js, config.js, prompts.js, text.js, recap.js, cache.js, test/*.test.js
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — the diff matches the ticket: a helper generalisation (boolean→emoji) that *removes* the catch's manual removal loop while satisfying AC1 (reliable 👀 removal) and AC3 (stale-clear) at once; the summary flow, message text, and 3-link cap stay byte-identical.
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` — `finalizeReaction` stays a single-responsibility helper (sweep-my-reactions + add one emoji), not a while-I'm-here outcome dispatcher.
+
+### Assumptions
+`.artifacts/reaction-lifecycle/pre_computation_block.md`
+
+*(6 assumptions — 5 HIGH, 1 MEDIUM. The MEDIUM is the design choice to keep `summariseLinks`'s boolean return: `true` = terminal/not-retryable (real OR abstention), `false` = hard error; the ✅-vs-⚠️ split lives inside `summariseLinks`. Verifications: `linkUnreadable` returned verbatim (hermes-cli.js:187); 6 `finalizeReaction` call sites; `.me` settled seconds post-react; bindingless `catch {}` dodges `no-unused-vars`; baseline npm test 86/86 + eslint 0 errors / 4 warnings.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The final diff matches the Pre-Flight commitment exactly. `finalizeReaction(message, resultEmoji)` now (a) fetches only when the reactions cache is empty, (b) sweeps every `r.me` reaction — reliably removing 👀 on a fetched/older message and clearing any stale ✅/⚠️/❌ from a prior attempt — then (c) adds the passed emoji. The 6 pre-existing call sites pass explicit emoji (`'✅'`/`'❌'`); `summariseLinks` computes `abstained = summaries.every(s => s === messagesFR.linkUnreadable)` and finalizes `abstained ? '⚠️' : '✅'` (still returning `true` — terminal, not retryable), and its catch routes through `finalizeReaction(message, '❌')` (deleting the manual `r.me` removal loop it subsumes). The handler, on a `false` return, best-effort `reaction.users.remove(user.id)` in a bindingless `catch {}` to re-arm the 5a8db57 retry. Abstained: a 3-value return token, named emoji constants, a dual-type `finalizeReaction`, a `.me`-race poll, an abstention admin-DM, and cb42d9b's empty-catch cleanup. Only `hermes-discord-bot-clean.js` changed. One consciously-reverted line: the `pendingMsg.delete()` catch stayed `catch (_)` (its warning belongs to cb42d9b, not this issue).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — helper generalisation (boolean→emoji) that *removes* the catch's manual removal loop; the sweep-all-`r.me` behaviour satisfies AC1 + AC3 at once with no state machine, return-token enum, emoji-constant table, or dual-type coercion.
+- [ ] **Scope Bleed** — only `hermes-discord-bot-clean.js` changed (+ artifacts/SESSION_LOG/METRICS). hermes-cli.js, config.js, prompts.js, text.js, recap.js, cache.js, tests untouched; the one pendingMsg `catch (_)` warning left for cb42d9b.
+- [ ] **Style Drift** — reuses the file's existing `r.me` sweep idiom (formerly in the catch) and inline-emoji style; eslint 0 errors / 1 pre-existing warning (0 new); prettier clean.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved` (patch ID + merge SHA + verification + the 4 ACs); PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/reaction-lifecycle/verification_matrix.md`
+
+10 of 11 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time. AC1–AC4 + terminal-outcome bookkeeping are exercised by an executable model (`scratchpad/reaction-lifecycle-model.mjs`, 17/17 assertions) that transcribes `finalizeReaction` + `summariseLinks` + the handler against mock Discord reactions — the entrypoint has no `module.exports` and calls `client.login` at load, so it is not live-drivable (a testability refactor is a separate concern). Model proves: (AC1) 👀 swept on success/abstain/error, incl. the empty-cache→fetch case the old `cache.get('👀')` missed; (AC2) real→✅, all-abstain→⚠️, all-throw→❌, mixed→✅; (AC3) a retry sweeps the stale ❌ + fresh 👀 → only ✅; (AC4) the triggering 📝 is removed, and a perm-absent `remove` is swallowed without crashing and stays retryable. Static/tooling: 0 boolean `finalizeReaction` args remain; npm test 86/86; eslint 0 errors / 1 pre-existing warning; prettier clean.

@@ -132,18 +132,31 @@ const client = new Client({
 // Get the token from environment
 const token = getDecryptedToken();
 
-// Helper: replace 👀 with success/error reaction
-async function finalizeReaction(message, success) {
+// Helper: clear the bot's own reactions on a message and add the terminal outcome marker
+// (`resultEmoji`: ✅ real result, ⚠️ honest abstention, ❌ hard error). Sweeping every r.me
+// reaction — not just `cache.get('👀')` — reliably removes 👀 even on a message fetched after a
+// restart, AND clears any stale ✅/⚠️/❌ from a prior attempt so a successful retry never stacks
+// a new marker on the old one (issue ffed210). Removing another user's 📝 is a separate,
+// permission-gated concern handled by the caller.
+async function finalizeReaction(message, resultEmoji) {
   try {
-    // Remove our 👀 reaction
-    const eyesReaction = message.reactions.cache.get('👀');
-    if (eyesReaction) {
-      await eyesReaction.users.remove(client.user.id);
+    // A message fetched after a restart can arrive with an empty reactions cache; hydrate it
+    // so r.me is populated before we filter. In the common path the bot just reacted 👀, so
+    // the cache is non-empty and no extra fetch happens.
+    if (message.reactions.cache.size === 0) {
+      try {
+        await message.fetch();
+      } catch {}
     }
-    // Add result reaction
-    await message.react(success ? '✅' : '❌');
-  } catch (e) {
-    // Reaction cleanup is best-effort
+    const botReactions = message.reactions.cache.filter((r) => r.me);
+    for (const [, reaction] of botReactions) {
+      try {
+        await reaction.users.remove(client.user.id);
+      } catch {}
+    }
+    await message.react(resultEmoji);
+  } catch {
+    // Reaction cleanup is best-effort.
   }
 }
 
@@ -255,7 +268,7 @@ client.on('messageCreate', async (message) => {
         }
         if (history.length === 0) {
           await message.reply("📭 Je n'ai trouvé aucun message récent dans ce canal.");
-          await finalizeReaction(message, false);
+          await finalizeReaction(message, '❌');
           return;
         }
 
@@ -290,7 +303,7 @@ client.on('messageCreate', async (message) => {
           await message.reply(
             "🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue."
           );
-          await finalizeReaction(message, false);
+          await finalizeReaction(message, '❌');
           return;
         }
 
@@ -317,7 +330,7 @@ client.on('messageCreate', async (message) => {
             await thread.send(`**${theme}**`);
           }
         }
-        await finalizeReaction(message, true);
+        await finalizeReaction(message, '✅');
         return;
       }
 
@@ -371,7 +384,7 @@ client.on('messageCreate', async (message) => {
 
       // Name the thread after the question so multiple threads in a channel stay distinct.
       await sendLongResponse(message, formattedResponse, buildThreadTitle(content));
-      await finalizeReaction(message, true);
+      await finalizeReaction(message, '✅');
     } catch (error) {
       console.error('Error:', error);
 
@@ -391,7 +404,7 @@ client.on('messageCreate', async (message) => {
         .join('\n');
       notifyAdmin('Question échouée', details);
 
-      await finalizeReaction(message, false);
+      await finalizeReaction(message, '❌');
 
       if (error.message.includes('Hermes')) {
         await safeReply(message, messagesFR.hermesError);
@@ -457,25 +470,25 @@ async function summariseLinks(message, links) {
     // Cache the last link for follow-up questions in this channel
     setCachedLink(message.channel.id, linksToProcess[0]);
 
-    await finalizeReaction(message, true);
+    // Honest abstention vs real summary: summarizeLink returns messagesFR.linkUnreadable verbatim
+    // when Hermes couldn't read the content (hermes-cli.js). If EVERY posted summary is that
+    // abstention, mark ⚠️ ("won't invent") rather than ✅; one real summary earns ✅ (issue
+    // ffed210). Either way it's a terminal, non-retryable outcome, so return true.
+    const abstained = summaries.every((s) => s === messagesFR.linkUnreadable);
+    await finalizeReaction(message, abstained ? '⚠️' : '✅');
     return true;
   } catch (error) {
     console.error('Link summary error:', error);
 
-    // Silently fail: delete pending message, remove 👀, DM admin only
+    // Hard failure: delete the pending placeholder, then mark ❌ (finalizeReaction also clears
+    // the 👀). A real timeout / dead link / all-links-fail now leaves a visible failure marker
+    // instead of a bare unmarked message (issue ffed210). Still no channel reply — DM admin only.
     if (pendingMsg) {
       try {
         await pendingMsg.delete();
       } catch (_) {}
     }
-    try {
-      const botReactions = message.reactions.cache.filter((r) => r.me);
-      for (const [, reaction] of botReactions) {
-        try {
-          await reaction.users.remove(client.user.id);
-        } catch (_) {}
-      }
-    } catch (_) {}
+    await finalizeReaction(message, '❌');
 
     // Build rich notification for admin
     const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
@@ -531,7 +544,19 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
     SUMMARISING_MESSAGES.add(message.id);
     try {
-      if (await summariseLinks(message, links)) rememberReaction(message.id);
+      if (await summariseLinks(message, links)) {
+        // Real summary OR honest abstention — a terminal, non-retryable outcome. Mark done.
+        rememberReaction(message.id);
+      } else {
+        // Hard error: 5a8db57 deliberately leaves the message un-remembered (retryable), but the
+        // user's 📝 is still on it, so no fresh messageReactionAdd can fire — the retry is
+        // unreachable. Remove the triggering 📝 so re-clicking it re-arms the summary. Removing
+        // another member's reaction needs Manage Messages; best-effort, so a missing perm just
+        // leaves the 📝 (manual un-react + re-react still works) instead of crashing (issue ffed210).
+        try {
+          await reaction.users.remove(user.id);
+        } catch {}
+      }
     } finally {
       SUMMARISING_MESSAGES.delete(message.id);
     }
