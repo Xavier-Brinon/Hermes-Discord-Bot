@@ -486,7 +486,7 @@ async function summariseLinks(message, links) {
     if (pendingMsg) {
       try {
         await pendingMsg.delete();
-      } catch (_) {}
+      } catch {}
     }
     await finalizeReaction(message, '❌');
 

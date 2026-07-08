@@ -62,7 +62,7 @@ logs the exact context it sends between `--- HERMES OUTPUT ---` markers in PM2
 
 - **Conservative parsing:** the runner scores raw `-Q` output; the live bot applies
   `unwrapText` first. So `parseable`/`no-preamble` are lower bounds. Full parity
-  lands when the Hermes output parser is extracted (issue `dcdec9e`).
+  would need the runner to apply `unwrapText` (text.js) before scoring, as the bot does.
 - **Link + Q&A runners** aren't built yet; `assertions.js` already exports
   `hasLinkStructure` / `countQuestions` / `isFrench` for them.
 - **LLM-as-judge** (subjective "are these themes representative?") is intentionally

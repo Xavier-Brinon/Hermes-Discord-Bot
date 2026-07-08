@@ -27,7 +27,8 @@ function hasLinkStructure(text) {
 
 // Recap compliance against the prompt's contract. Conservative: runs extractThemes
 // on the raw model output (no unwrapText), so the rate is a lower bound vs the
-// live bot, which applies unwrapText first. Full parity arrives with issue dcdec9e.
+// live bot, which applies unwrapText first. Full parity would need the runner to
+// apply unwrapText (text.js) before scoring, as the live bot does.
 function recapCompliance(output) {
   const themes = extractThemes(output);
   const lines = output
