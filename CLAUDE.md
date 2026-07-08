@@ -25,10 +25,10 @@ links on demand.
 
 ## Running
 
-| Context | Command |
-|---|---|
-| Local / dev | `npm start` |
-| VPS (canonical) | `./manage_hermes.sh {start\|stop\|restart\|status\|logs}` |
+| Context          | Command                                                         |
+| ---------------- | --------------------------------------------------------------- |
+| Local / dev      | `npm start`                                                     |
+| VPS (canonical)  | `./manage_hermes.sh {start\|stop\|restart\|status\|logs}`       |
 | VPS (npm equiv.) | `npm run pm2:start` / `pm2:restart` / `pm2:status` / `pm2:logs` |
 
 Deployment harness on the VPS (`/data/workspace`): **PM2** supervises the bot, a
@@ -70,10 +70,10 @@ issue → branch → rad patch → review → merge → solve issue
 
 ### Triage labels (required on every new issue)
 
-| Label | Range | Meaning |
-|---|---|---|
-| `effort:N` | 1–10 | Brute-force coding cost (1 = minutes, 10 = multi-day grind) |
-| `complexity:N` | 1–10 | Codebase + domain knowledge required (1 = beginner, 10 = expert) |
+| Label           | Range  | Meaning                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------- |
+| `effort:N`      | 1–10   | Brute-force coding cost (1 = minutes, 10 = multi-day grind)                  |
+| `complexity:N`  | 1–10   | Codebase + domain knowledge required (1 = beginner, 10 = expert)             |
 | `confidence:N%` | 0–100% | "Do I know what I'm doing?" (0% = investigation, 100% = done it in my sleep) |
 
 ### `rad` CLI gotchas (read before filing)
@@ -113,22 +113,22 @@ code and architecture changes.
 
 ## Quick-reference: Complexity → Skills
 
-| Raw sum | Tier     | Skills activated             |
-|---------|----------|------------------------------|
-| 0 – 2   | TRIVIAL  | D                            |
-| 3 – 5   | STANDARD | A + B + C + D                |
-| 6 – 8   | COMPLEX  | A + B + C + D + Expert Review|
+| Raw sum | Tier     | Skills activated              |
+| ------- | -------- | ----------------------------- |
+| 0 – 2   | TRIVIAL  | D                             |
+| 3 – 5   | STANDARD | A + B + C + D                 |
+| 6 – 8   | COMPLEX  | A + B + C + D + Expert Review |
 
 Scoring rubric and worked examples: `skills/orchestrator.md`.
 
 ## Skills
 
-| Letter | Name                 | File                     | Fires when                         |
-|--------|----------------------|--------------------------|------------------------------------|
-| A      | Think Before Coding  | `skills/think.md`        | `tier ≥ STANDARD`                  |
-| B      | Simplicity First     | `skills/simplicity.md`   | `tier ≥ STANDARD`                  |
-| C      | Surgical Changes     | `skills/surgical.md`     | any task modifying existing files  |
-| D      | Goal-Driven Execution| `skills/goal.md`         | ALL tasks (minimal for TRIVIAL)    |
+| Letter | Name                  | File                   | Fires when                        |
+| ------ | --------------------- | ---------------------- | --------------------------------- |
+| A      | Think Before Coding   | `skills/think.md`      | `tier ≥ STANDARD`                 |
+| B      | Simplicity First      | `skills/simplicity.md` | `tier ≥ STANDARD`                 |
+| C      | Surgical Changes      | `skills/surgical.md`   | any task modifying existing files |
+| D      | Goal-Driven Execution | `skills/goal.md`       | ALL tasks (minimal for TRIVIAL)   |
 
 ## Mandatory Workflow
 

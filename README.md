@@ -82,7 +82,7 @@ confirm a reply in French.
 - **Restarts**: PM2 auto-restarts the bot on crash. A climbing `↺` count in
   `./manage_hermes.sh status` means a crash loop — watch the logs right after a
   redeployment.
-- **One-way street**: the VPS *pulls* the code (`git pull`); we never push to
+- **One-way street**: the VPS _pulls_ the code (`git pull`); we never push to
   `/data/workspace`. The canonical source stays Radicle + `origin`.
 
 ### Rollback
@@ -133,12 +133,12 @@ start/restart.
 
 ## Troubleshooting
 
-| Problem | Check |
-|---|---|
-| Bot does not respond | `./manage_hermes.sh status` |
-| Token error | `npx dotenvx get DISCORD_BOT_TOKEN` |
-| Bot down after a container restart | `./manage_hermes.sh start` |
-| PM2 corrupted | `npx pm2 kill && ./manage_hermes.sh start` |
+| Problem                            | Check                                      |
+| ---------------------------------- | ------------------------------------------ |
+| Bot does not respond               | `./manage_hermes.sh status`                |
+| Token error                        | `npx dotenvx get DISCORD_BOT_TOKEN`        |
+| Bot down after a container restart | `./manage_hermes.sh start`                 |
+| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start` |
 
 ## Maintenance
 

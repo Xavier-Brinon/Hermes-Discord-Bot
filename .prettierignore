@@ -1,0 +1,14 @@
+# Append-only framework records — Prettier would corrupt the historical trail
+.artifacts/
+SESSION_LOG.md
+METRICS.md
+
+# Vendored @YackShavingSkill framework — tracked from upstream, don't restyle
+skills/
+examples/
+templates/
+schemas/
+tools/
+
+# Tool-managed config (Serena MCP)
+.serena/

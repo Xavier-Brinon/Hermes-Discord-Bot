@@ -23,14 +23,14 @@ VPS / a VPS snapshot).
 
 Output columns:
 
-| Column | Meaning |
-|---|---|
-| `parseable` | % of runs where `extractThemes` found ≥1 theme (the bot would render something, not the "no themes" error) |
-| `3-5themes` | % of runs with 3–5 themes (the prompt's "3 à 5 max") |
-| `no-preamble` | % of runs where every non-empty line is a `THEME:` line ("Juste les thèmes") |
-| `french` | % of runs whose themes read as French |
-| `meanThemes` | average theme count across non-error runs |
-| `errors` | runs that errored/timed out |
+| Column        | Meaning                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| `parseable`   | % of runs where `extractThemes` found ≥1 theme (the bot would render something, not the "no themes" error) |
+| `3-5themes`   | % of runs with 3–5 themes (the prompt's "3 à 5 max")                                                       |
+| `no-preamble` | % of runs where every non-empty line is a `THEME:` line ("Juste les thèmes")                               |
+| `french`      | % of runs whose themes read as French                                                                      |
+| `meanThemes`  | average theme count across non-error runs                                                                  |
+| `errors`      | runs that errored/timed out                                                                                |
 
 ## Steer the recap (A/B a prompt change)
 

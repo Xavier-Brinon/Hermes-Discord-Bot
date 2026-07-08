@@ -15,11 +15,33 @@ const { LINK_PATTERN } = require('./config');
 // prefixes. Three bugs fixed in issue 3471651 (accented months fell through, English
 // was unhandled, 'fevrier' mapped to January); behaviour is pinned by test/recap.test.js.
 const MONTH_NAMES = {
-  'janvier':0,'février':1,'fevrier':1,'mars':2,'avril':3,'mai':4,'juin':5,
-  'juillet':6,'aout':7,'août':7,'septembre':8,'octobre':9,'novembre':10,
-  'décembre':11,'decembre':11,
-  'january':0,'february':1,'march':2,'april':3,'may':4,'june':5,
-  'july':6,'august':7,'september':8,'october':9,'november':10,'december':11
+  janvier: 0,
+  février: 1,
+  fevrier: 1,
+  mars: 2,
+  avril: 3,
+  mai: 4,
+  juin: 5,
+  juillet: 6,
+  aout: 7,
+  août: 7,
+  septembre: 8,
+  octobre: 9,
+  novembre: 10,
+  décembre: 11,
+  decembre: 11,
+  january: 0,
+  february: 1,
+  march: 2,
+  april: 3,
+  may: 4,
+  june: 5,
+  july: 6,
+  august: 7,
+  september: 8,
+  october: 9,
+  november: 10,
+  december: 11,
 };
 
 // Parse a recap request into a timeframe. Returns { daysBack, sinceTs, untilTs }:
@@ -27,7 +49,8 @@ const MONTH_NAMES = {
 // default; relative/numeric requests set daysBack and leave the timestamps null.
 function parseTimeframe(content, now) {
   let daysBack = 7; // default: 1 week
-  let sinceTs = null, untilTs = null; // absolute timestamps for month-based requests
+  let sinceTs = null,
+    untilTs = null; // absolute timestamps for month-based requests
 
   // "mois de mai", "mois d'avril", "month of may" → only that month.
   // `\p{L}+` + the `u` flag captures accented month names; the prefix accepts both
@@ -127,7 +150,9 @@ async function fetchChannelHistory(channel, opts = {}) {
 
       const firstMsg = batch.first();
       const lastMsg = batch.last();
-      console.log(`📜 Batch: ${batch.size} msgs, range: ${new Date(lastMsg.createdTimestamp).toISOString()} → ${new Date(firstMsg.createdTimestamp).toISOString()}`);
+      console.log(
+        `📜 Batch: ${batch.size} msgs, range: ${new Date(lastMsg.createdTimestamp).toISOString()} → ${new Date(firstMsg.createdTimestamp).toISOString()}`
+      );
 
       // If the NEWEST message in this batch is already older than cutoff, stop
       if (firstMsg.createdTimestamp < since) {
@@ -149,13 +174,15 @@ async function fetchChannelHistory(channel, opts = {}) {
           content: msg.content.substring(0, 500),
           timestamp: msg.createdAt.toISOString(),
           hasLinks: LINK_PATTERN.test(msg.content),
-          isBot: msg.author.bot
+          isBot: msg.author.bot,
         });
       }
 
       lastId = batch.last().id;
       fetched += batch.size;
-      console.log(`📜 Collected ${allMessages.length} in-window messages so far (${fetched} total fetched)...`);
+      console.log(
+        `📜 Collected ${allMessages.length} in-window messages so far (${fetched} total fetched)...`
+      );
 
       // Safety limit: max 5000 messages fetched
       if (fetched >= 5000) {

@@ -20,7 +20,7 @@ test('parseTimeframe — "mois de mai" → the whole of May 2026', () => {
   assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 4));
 });
 
-test("parseTimeframe — \"mois d'avril\" → April 2026", () => {
+test('parseTimeframe — "mois d\'avril" → April 2026', () => {
   const r = parseTimeframe("résume le mois d'avril", NOW);
   assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 3));
 });

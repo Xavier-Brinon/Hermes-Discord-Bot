@@ -1008,3 +1008,48 @@ PASSED. The final diff matches the Pre-Flight commitment exactly. `finalizeReact
 `.artifacts/reaction-lifecycle/verification_matrix.md`
 
 10 of 11 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time. AC1–AC4 + terminal-outcome bookkeeping are exercised by an executable model (`scratchpad/reaction-lifecycle-model.mjs`, 17/17 assertions) that transcribes `finalizeReaction` + `summariseLinks` + the handler against mock Discord reactions — the entrypoint has no `module.exports` and calls `client.login` at load, so it is not live-drivable (a testability refactor is a separate concern). Model proves: (AC1) 👀 swept on success/abstain/error, incl. the empty-cache→fetch case the old `cache.get('👀')` missed; (AC2) real→✅, all-abstain→⚠️, all-throw→❌, mixed→✅; (AC3) a retry sweeps the stale ❌ + fresh 👀 → only ✅; (AC4) the triggering 📝 is removed, and a perm-absent `remove` is swallowed without crashing and stays retryable. Static/tooling: 0 boolean `finalizeReaction` args remain; npm test 86/86; eslint 0 errors / 1 pre-existing warning; prettier clean.
+
+
+---
+
+# Task: d583385-prettierignore
+complexity_score: 4
+complexity_tier: STANDARD
+
+Radicle issue: d583385 — hygiene: add .prettierignore (records + append-only) and format the drifted source files
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One `.prettierignore` grouping (a) append-only records — `.artifacts/`, `SESSION_LOG.md`, `METRICS.md` — and (b) the vendored `@YackShavingSkill` framework + tool config — `skills/`, `examples/`, `templates/`, `schemas/`, `tools/`, `.serena/`; then a single `prettier --write` over the 11 our-source/doc files (config.js, recap.js, test-token.js, test/{modules,recap}.test.js, evals/{run-recap-eval.js,README.md}, README.md, CONTEXT.md, CLAUDE.md, hermes-discord-bot.md). I will NOT add a `.prettierrc`/rule tuning, reformat vendored or record files, add a pre-commit hook (setup-pre-commit's job), touch any logic/prose, or list `waysofworking.org` (Prettier has no org parser).
+- **Scope Boundaries:**
+  - In-scope: `.prettierignore` (new) + the 11 drifted our-source/doc files
+  - Out-of-scope: `.artifacts/**`, `skills/`, `examples/`, `templates/`, `schemas/`, `tools/`, `.serena/`, and all already-clean source (hermes-discord-bot-clean.js, hermes-cli.js, cache.js, prompts.js, text.js, evals/assertions.js)
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — change only what the ticket needs; the ignore list keeps Prettier away from the 100+ framework records + vendored dirs rather than dragging them into a formatting churn.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no `.prettierrc`, no hook, no rule tuning bolted on "while I'm here".
+
+### Assumptions
+`.artifacts/d583385-prettierignore/pre_computation_block.md`
+
+*(6 assumptions — 5 HIGH, 1 MEDIUM. The MEDIUM is that Prettier never processes `waysofworking.org` — it is absent from the `prettier --check .` drift list, so it needs no ignore entry.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Final change matches the Pre-Flight commitment: one `.prettierignore` (append-only records + vendored `@YackShavingSkill` framework + `.serena/`) and a `prettier --write` over exactly the 11 our-source/doc files. No `.prettierrc`, no rule tuning, no pre-commit hook, no vendored/record reformat, no logic/prose edit. Docs verified cosmetic-only (word-token multiset identical; only table padding + `*`→`_` emphasis changed — the style the issue flagged). `waysofworking.org` left out of the ignore (Prettier has no org parser).
+
+### Violation Checklist
+- [ ] **Complexity Creep** — 16-line ignore file + a mechanical format pass; nothing added beyond it.
+- [ ] **Scope Bleed** — only `.prettierignore` + the 11 files changed; `.artifacts/`, `skills/`, `examples/`, `templates/`, `schemas/`, `tools/`, `.serena/`, and already-clean source untouched.
+- [ ] **Style Drift** — the point of the task; `prettier --check .` now clean.
+- [ ] **Issue Lifecycle** — comment before `rad issue state --solved`; PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/d583385-prettierignore/verification_matrix.md`
+
+8 of 9 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time. `prettier --check .` clean; `.artifacts/`+vendored dirs show no format diff; docs word-identical (table padding + `*`→`_` emphasis only); all 6 formatted JS files `node --check` clean; npm test 86/86; eslint . 0 problems.

@@ -10,7 +10,7 @@ if (!token) {
 }
 
 const client = new Client({
-  intents: []
+  intents: [],
 });
 
 client.on('ready', () => {
@@ -26,7 +26,7 @@ client.on('error', (error) => {
 });
 
 console.log('Testing token...');
-client.login(token).catch(err => {
+client.login(token).catch((err) => {
   console.error(`❌ Token invalid: ${err.message}`);
   process.exit(1);
 });

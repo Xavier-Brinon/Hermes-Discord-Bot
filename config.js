@@ -49,7 +49,7 @@ const messagesFR = {
   greeting:
     '👋 Bonjour ! Je suis {botName}, votre assistant IA Hermes.\n' +
     "💡 Pour m'utiliser, mentionnez-moi avec votre question en français.\n" +
-    'Exemple : @{botName} quel temps fait-il aujourd\'hui ?',
+    "Exemple : @{botName} quel temps fait-il aujourd'hui ?",
 
   processing: '👀', // emoji reaction instead of text reply
 
@@ -68,7 +68,7 @@ const messagesFR = {
     "**Exemples d'utilisation :**\n" +
     '• @{botName} Quel temps fait-il à Paris ?\n' +
     "• @{botName} Peux-tu me donner la définition de 'algorithmique' ?\n" +
-    '• @{botName} Quelles sont les actualités technologiques aujourd\'hui ?',
+    "• @{botName} Quelles sont les actualités technologiques aujourd'hui ?",
 
   fallbackResponse:
     "🤔 Je n'ai pas trouvé d'information précise sur '{command}'.\n" +

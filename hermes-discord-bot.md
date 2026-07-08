@@ -1,7 +1,7 @@
 # Hermes Discord Bot — Governing Design Doc
 
-> The project's perpetual identity statement: *what* it is for, *who* it serves,
-> and *what success looks like*. Depth lives in the artifacts referenced here
+> The project's perpetual identity statement: _what_ it is for, _who_ it serves,
+> and _what success looks like_. Depth lives in the artifacts referenced here
 > (`README.md`, `CLAUDE.md`, Radicle issues), not inlined.
 
 ## What

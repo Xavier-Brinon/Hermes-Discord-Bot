@@ -10,7 +10,14 @@ const assert = require('node:assert/strict');
 
 test('config — exports constants, paths, patterns, messagesFR', () => {
   const c = require('../config');
-  for (const k of ['HERMES_BIN', 'CACHE_FILE', 'SESSION_CACHE_FILE', 'TIMEOUT_RECAP', 'MAX_ARGV_PROMPT_BYTES', 'DISCORD_MSG_LIMIT']) {
+  for (const k of [
+    'HERMES_BIN',
+    'CACHE_FILE',
+    'SESSION_CACHE_FILE',
+    'TIMEOUT_RECAP',
+    'MAX_ARGV_PROMPT_BYTES',
+    'DISCORD_MSG_LIMIT',
+  ]) {
     assert.ok(c[k] !== undefined, `config.${k} missing`);
   }
   assert.ok(c.LINK_PATTERN instanceof RegExp);
@@ -20,7 +27,13 @@ test('config — exports constants, paths, patterns, messagesFR', () => {
 
 test('text — exports the text/url helpers including the moved formatHermesResponse/sendLongResponse', () => {
   const t = require('../text');
-  for (const fn of ['unwrapText', 'splitAtBoundaries', 'extractLinks', 'formatHermesResponse', 'sendLongResponse']) {
+  for (const fn of [
+    'unwrapText',
+    'splitAtBoundaries',
+    'extractLinks',
+    'formatHermesResponse',
+    'sendLongResponse',
+  ]) {
     assert.equal(typeof t[fn], 'function', `text.${fn} not a function`);
   }
 });
@@ -34,7 +47,13 @@ test('recap — exports parseTimeframe + the moved fetchChannelHistory/scanChann
 
 test('cache — exports the accessor API', () => {
   const cache = require('../cache');
-  for (const fn of ['getSessionKey', 'getCachedLink', 'setCachedLink', 'getSessionId', 'setSessionId']) {
+  for (const fn of [
+    'getSessionKey',
+    'getCachedLink',
+    'setCachedLink',
+    'getSessionId',
+    'setSessionId',
+  ]) {
     assert.equal(typeof cache[fn], 'function', `cache.${fn} not a function`);
   }
 });
