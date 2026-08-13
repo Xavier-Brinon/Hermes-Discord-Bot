@@ -60,6 +60,31 @@ Four composable modules, each producing one artifact.
 | *Review Gate*       | The entry to the Review phase: the Reviewer reads the Session Journal first, then the code.                       |
 | *Instant Fail*      | A direct contradiction between Pre-Flight commitments and Post-Flight output (e.g. committed to 20 lines, produced 200) — fails immediately. |
 
+* Diagnostic pitfalls
+Failure modes observed when an agent investigates a running system. Each is a
+/reporting/ failure rather than a reasoning failure: the analysis was sound
+against the thing measured, and the thing measured was not the thing asked
+about.
+
+| Term                      | Definition                                                                                                           |
+|---------------------------+----------------------------------------------------------------------------------------------------------------------|
+| *Surrogate Surface*       | Measuring something adjacent to the system under test and reporting it as the system. A shell, a local checkout, or a hand-invoked binary rarely reproduces a service's runtime: env, working directory, config home, profile and executable path can each differ. |
+| *Liveness Fallacy*        | Reading /the process is up/ as /the dependency chain works/. Transport health (connected, online, green) is independent of the backends behind it, so a service can stay green while every downstream call fails and is caught. |
+| *Deferred Decisive Check* | Naming the check that would settle a question, then continuing to reason past it. Once named it blocks: conclusions drawn before it lands are provisional and must be labelled so. |
+| *Version-Bound Finding*   | A conclusion true only of the version inspected. A finding about a dependency carries that dependency's version, or it inverts silently when the deployed version differs. |
+| *Premature Severity*      | Asserting an impact level (/down/, /broken/, /data loss/) before the system of record confirms it. Severity claims are load-bearing: they redirect attention and enter the permanent record. |
+
+- Measure the system of record :: reproduce the service's own invocation path
+  (launcher, env, profile, working directory), or state plainly that you did
+  not.
+- Label provisional conclusions :: anything asserted ahead of a named decisive
+  check says so in the same sentence.
+- Observability beats inference :: when investigation keeps producing
+  contradictions, the cheapest fix is usually to make the ambiguous fact
+  observable (log it, assert it at startup) rather than to reason harder.
+- Findings carry their version :: record what a finding was verified against,
+  and re-verify before acting on it elsewhere.
+
 * Conventions
 1. *Artifacts are primary* — every skill must produce a concrete artifact.
 2. *Journal precedes code* — the Pre-Flight entry is a gate; no edits before it.
