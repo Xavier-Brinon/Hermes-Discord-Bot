@@ -22,6 +22,13 @@ const TIMEOUT_NORMAL = 90000; // 90s — plain @mention/DM questions
 const TIMEOUT_WEB = 150000; // 150s — questions using -t web (search + fetch)
 const TIMEOUT_RECAP = 120000; // 120s — channel recap summarisation
 
+// Cap Hermes's tool-calling iterations for a link summary. Hermes defaults to 90, so under
+// TIMEOUT_WEB a pathological page can spend the whole budget looping and still yield only a
+// best-effort answer. A normal summary needs a handful of turns, so this bounds the worst case
+// with headroom to spare. Exhausting the cap is treated as an abstention rather than a partial
+// summary — see summarizeLink and issue 54ed189.
+const MAX_TURNS_LINK = 10;
+
 // A single CLI argv string is capped by the kernel (Linux MAX_ARG_STRLEN ≈ 128 KB);
 // above this ceiling the bot offloads context to a file via Hermes @file: (issue 1f154fc).
 const MAX_ARGV_PROMPT_BYTES = 96 * 1024;
@@ -90,6 +97,7 @@ module.exports = {
   TIMEOUT_NORMAL,
   TIMEOUT_WEB,
   TIMEOUT_RECAP,
+  MAX_TURNS_LINK,
   MAX_ARGV_PROMPT_BYTES,
   DISCORD_MSG_LIMIT,
   LINK_PATTERN,

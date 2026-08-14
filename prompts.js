@@ -125,6 +125,16 @@ function extractThemes(rawResponse) {
 // stdout lines, so we drop leading blank lines and leaked `⚠ ` CLI warnings
 // before the response. Returns { response, sessionId }. Replaces the old
 // banner-scraping loops + extractSessionId(stdout). See issue 9864045.
+// Hermes prints this control line to stdout when a run exhausts its --max-turns budget, then
+// returns a best-effort answer and exits 0 — so the bot sees success, not failure, and would
+// otherwise post the notice itself as the reply. The existing bare-⚠ skip below does NOT catch it:
+// Hermes emits `⚠️` (U+26A0 + U+FE0F) and that skip deliberately spares the emoji form so a real
+// answer survives. Filtered for every flow, since askHermes runs at Hermes's default 90 and can hit
+// the ceiling too. Exported so summarizeLink can treat a capped run as an abstention instead of
+// posting a summary assembled from partial data. The prefix is optional because the wording was
+// captured on a newer Hermes than the bot runs. See issue 54ed189.
+const MAX_ITERATIONS_NOTICE = /^\s*(?:⚠️?\s*)?Reached maximum iterations\b/mu;
+
 function parseHermesOutput(stdout, stderr) {
   // Drop Hermes tool-progress narration that leaks past -Q: the fetch/read trace
   // lines `📄 Reading <url>` and `📖 Reading <file> L<range>`. Filtered line-wise
@@ -135,7 +145,7 @@ function parseHermesOutput(stdout, stderr) {
   const READING_TRACE = /^\s*(?:📄|📖) Reading /u;
   const lines = String(stdout || '')
     .split('\n')
-    .filter((line) => !READING_TRACE.test(line));
+    .filter((line) => !READING_TRACE.test(line) && !MAX_ITERATIONS_NOTICE.test(line));
   let i = 0;
   // Skip leading blanks and leaked CLI diagnostics: a bare `⚠` (U+26A0) NOT
   // followed by the emoji variation selector — so a real `⚠️` answer survives.
@@ -159,6 +169,7 @@ function parseHermesOutput(stdout, stderr) {
 
 module.exports = {
   LINK_UNREADABLE_SENTINEL,
+  MAX_ITERATIONS_NOTICE,
   buildAskPrompt,
   buildAskPromptWithContextFile,
   buildLinkPrompt,

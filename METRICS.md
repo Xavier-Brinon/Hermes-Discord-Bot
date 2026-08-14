@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-08-13T14:35:29Z
-source_count: 26
+timestamp: 2026-08-14T14:12:47Z
+source_count: 27
 ---
 
 # Metrics — @YackShavingSkill
@@ -26,6 +26,7 @@ they do not represent current drift. Canonical definition:
 | embed-anchor-summary | STANDARD | PASS | 100% |
 | global-error-handlers | STANDARD | PASS | 100% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
+| max-turns-cap | STANDARD | PASS | 100% |
 | mention-gate | STANDARD | PASS | 100% |
 | modularise-entrypoint | COMPLEX | PASS | 100% |
 | music-streaming-skip | TRIVIAL | PASS | 100% |
@@ -50,14 +51,14 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 26 |
+| Total tasks | 27 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 100.0% |
 
 ## Violations by type
 | Type | Count across all tasks |
 |------|------------------------|
-| Complexity Creep | 0 |
+| Complexity Creep | 1 |
 | Scope Bleed | 0 |
 | Style Drift | 1 |
 
@@ -90,3 +91,4 @@ they do not represent current drift. Canonical definition:
 | 2026-07-08T05:52:51Z | catch-hygiene | 100% |
 | 2026-07-08T06:42:44Z | d583385-prettierignore | 100% |
 | 2026-08-13T14:33:55Z | diagnostic-pitfalls | 100% |
+| 2026-08-14T14:12:14Z | max-turns-cap | 100% |

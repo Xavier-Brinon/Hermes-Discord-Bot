@@ -17,6 +17,7 @@ const {
   buildRecapPrompt,
   extractThemes,
   parseHermesOutput,
+  MAX_ITERATIONS_NOTICE,
 } = require('../prompts');
 
 test('buildAskPrompt — no context — byte-identical to former inline literal', () => {
@@ -190,6 +191,45 @@ test('parseHermesOutput — session id read from stderr, not stdout', () => {
 test('parseHermesOutput — warning-only stdout yields empty response (fallback path)', () => {
   const stdout = '  ⚠ tirith security scanner enabled but not available';
   assert.deepEqual(parseHermesOutput(stdout, ''), { response: '', sessionId: null });
+});
+
+// MAX_ITERATIONS_NOTICE — a run that exhausts --max-turns exits 0 and prints this control line
+// before a best-effort answer, so it must never reach Discord. Fixture is a verbatim capture
+// (including its trailing \r). See issue 54ed189.
+
+test('parseHermesOutput — drops the --max-turns notice (verbatim capture, trailing \\r)', () => {
+  const stdout =
+    '⚠️  Reached maximum iterations (10). Requesting summary...\r\n' +
+    'Résumé partiel du contenu de la page.';
+  assert.deepEqual(parseHermesOutput(stdout, ''), {
+    response: 'Résumé partiel du contenu de la page.',
+    sessionId: null,
+  });
+});
+
+test('parseHermesOutput — drops the notice with a bare ⚠ prefix or none at all', () => {
+  for (const prefix of ['⚠️  ', '⚠ ', '', '  ']) {
+    const stdout = `${prefix}Reached maximum iterations (3). Requesting summary...\nRéponse.`;
+    assert.equal(
+      parseHermesOutput(stdout, '').response,
+      'Réponse.',
+      `prefix: ${JSON.stringify(prefix)}`
+    );
+  }
+});
+
+test('MAX_ITERATIONS_NOTICE — detects the notice anywhere in raw multi-line stdout', () => {
+  // summarizeLink tests raw stdout, not the parsed response, so the pattern must match mid-stream.
+  const stdout =
+    'Ligne une.\n⚠️  Reached maximum iterations (10). Requesting summary...\nLigne deux.';
+  assert.ok(MAX_ITERATIONS_NOTICE.test(stdout));
+});
+
+test('MAX_ITERATIONS_NOTICE — does not match a real French answer mentioning iterations', () => {
+  assert.ok(
+    !MAX_ITERATIONS_NOTICE.test("L'algorithme atteint le maximum d'itérations en 3 passes.")
+  );
+  assert.ok(!MAX_ITERATIONS_NOTICE.test('⚠️ Attention : pensez à sauvegarder.'));
 });
 
 test('parseHermesOutput — no session id anywhere yields null', () => {

@@ -11,6 +11,7 @@ const {
   HERMES_BIN,
   TIMEOUT_NORMAL,
   TIMEOUT_WEB,
+  MAX_TURNS_LINK,
   MAX_ARGV_PROMPT_BYTES,
   messagesFR,
 } = require('./config');
@@ -20,6 +21,7 @@ const {
   buildLinkPrompt,
   parseHermesOutput,
   LINK_UNREADABLE_SENTINEL,
+  MAX_ITERATIONS_NOTICE,
 } = require('./prompts');
 const { unwrapText } = require('./text');
 
@@ -153,7 +155,22 @@ function summarizeLink(url, context, meta = null) {
 
     execFile(
       HERMES_BIN,
-      ['-p', 'discord-bot', 'chat', '-q', prompt, '-t', 'web', '-Q', '--source', 'tool'],
+      // --max-turns is appended after the `chat` subcommand, so it is unaffected by the
+      // positional splices askHermes uses for --resume / -t web.
+      [
+        '-p',
+        'discord-bot',
+        'chat',
+        '-q',
+        prompt,
+        '-t',
+        'web',
+        '-Q',
+        '--source',
+        'tool',
+        '--max-turns',
+        String(MAX_TURNS_LINK),
+      ],
       {
         timeout: TIMEOUT_WEB,
         maxBuffer: 1024 * 1024,
@@ -177,6 +194,14 @@ function summarizeLink(url, context, meta = null) {
         console.log('--- HERMES OUTPUT ---');
         console.log(stdout);
         console.log('--- END HERMES OUTPUT ---');
+        // A run that exhausts --max-turns exits 0 and returns a best-effort answer assembled from
+        // whatever partial data it gathered — exactly the fabrication the abstain gate exists to
+        // prevent. Abstain instead of posting it. Tested against raw stdout because
+        // parseHermesOutput strips the notice from the response. See issue 54ed189.
+        if (MAX_ITERATIONS_NOTICE.test(stdout || '')) {
+          console.log(`⚠️  Link summary hit the ${MAX_TURNS_LINK}-turn cap — abstaining`);
+          return resolve(messagesFR.linkUnreadable);
+        }
         // Parse Hermes -Q output, then unwrap terminal line-breaks.
         let { response } = parseHermesOutput(stdout, stderr);
         response = unwrapText(response);

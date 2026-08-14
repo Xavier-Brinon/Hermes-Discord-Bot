@@ -1053,3 +1053,52 @@ PASSED. Final change matches the Pre-Flight commitment: one `.prettierignore` (a
 `.artifacts/d583385-prettierignore/verification_matrix.md`
 
 8 of 9 matrix subtasks PASS; the 1 PENDING (issue lifecycle) is merge-time. `prettier --check .` clean; `.artifacts/`+vendored dirs show no format diff; docs word-identical (table padding + `*`→`_` emphasis only); all 6 formatted JS files `node --check` clean; npm test 86/86; eslint . 0 problems.
+
+
+---
+
+# Task: max-turns-cap
+complexity_score: 5
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One constant (`MAX_TURNS_LINK = 10`) in config.js, one `--max-turns` pair appended to `summarizeLink`'s argv, and one regex in prompts.js that both drops the `Reached maximum iterations` notice from the parsed response and is exported so the caller can detect a ceiling hit and resolve to the existing `messagesFR.linkUnreadable`. I will NOT change `parseHermesOutput`'s return shape, add a second constant for `askHermes`, make the cap env-overridable, add a retry ladder, introduce a second French message for "truncated", or refactor the argv builder.
+- **Scope Boundaries:**
+  - In-scope: `config.js`, `prompts.js`, `hermes-cli.js`, `test/prompts.test.js`
+  - Out-of-scope: `hermes-discord-bot-clean.js` (the ⚠️ marker already falls out of the existing `abstained` computation), `recap.js`, `text.js`, `cache.js`, `evals/`, `README.md`, `CONTEXT.md`, `CLAUDE.md`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — the minimum edit at each site; the notice filter mirrors the existing `READING_TRACE` line-filter rather than inventing a new mechanism.
+- Anti-Pattern avoided: `examples/anti-patterns/bloated-loop.md` (defensive code for a scenario that isn't real) and `examples/anti-patterns/god-object.md` (resisting turning hermes-cli.js into a general invocation builder while already in there).
+
+### Assumptions
+`.artifacts/max-turns-cap/pre_computation_block.md`
+
+*(6 assumptions — 4 HIGH, 1 MEDIUM, 1 LOW. The LOW is that the notice wording is identical on the bot's v0.16.0; it was measured on v0.20.0 only. Mitigated by tolerant matching, and a non-match degrades to today's behaviour rather than to a failure.)*
+
+### Design change forced by measurement
+The issue was filed on the premise that `--max-turns` makes a runaway "fail fast" to ❌. Measured directly before coding: exhausting the ceiling exits **0** and emits `⚠️  Reached maximum iterations (N). Requesting summary...` on stdout, followed by a best-effort answer. `parseHermesOutput` returns that control line verbatim (the existing bare-`⚠` skip deliberately spares `⚠️` = U+26A0 + U+FE0F, so it does not catch it). Adding the flag alone would therefore put English control text into a French channel. Scope grew from 2 files to 4 to fix that in the same change, and the user chose abstention over posting a partial summary — consistent with `1b94451` / `de52e4a`.
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The shipped diff matches the Pre-Flight commitment item for item: one constant (`MAX_TURNS_LINK = 10`) in config.js, one `--max-turns` pair appended to `summarizeLink`'s argv, one `MAX_ITERATIONS_NOTICE` regex in prompts.js that both drops the notice line from every flow's parsed response and is exported so `summarizeLink` can abstain on a ceiling hit. `parseHermesOutput`'s `{response, sessionId}` return shape is unchanged, so the three `assert.deepEqual` contracts still hold (the Pre-Computation Block said two; it is three — `:162`, `:173`, `:193`). Every abstained item stayed abstained: no env-overridable cap, no `MAX_TURNS_ASK`, no `maxTurnsHit` field, no retry ladder, no second French message, no argv-builder refactor. `hermes-discord-bot-clean.js` was not touched, as predicted — the ⚠️ marker falls out of the existing `abstained` computation for free.
+
+### Violation Checklist
+- [x] **Complexity Creep** — Line-Count Budget FIRED a Simplify Trigger: Target 20, Actual 56 (+180%). Diagnosed and recorded in `.artifacts/max-turns-cap/simplicity_review.md` rather than hidden. Two causes, neither of them added logic: 10 of hermes-cli.js's 20 lines are single-quoted array elements that Prettier exploded when two elements pushed a one-line literal past the print width (semantically +2 elements), and 31 lines are four `test()` blocks against a Target of 9 that could never have held them (6–8 lines per block). Re-planned Target 50, against which Actual is +12%. Cross-checked: every Abstinence List item is still absent from the diff, so the overage is estimation error and formatter behaviour, not disguised creep.
+- [ ] **Scope Bleed** — only the 4 declared files changed (+ SESSION_LOG.md/METRICS/.artifacts, declared as process records). The scope grew from the 2 files estimated at filing time to 4, but that growth was declared in the Pre-Flight Scope Boundaries *before* any edit, driven by the pre-coding measurement, so it is a re-plan and not bleed. All Out-of-Bound files untouched.
+- [ ] **Style Drift** — the notice filter mirrors the existing `READING_TRACE` line-filter idiom in the same function rather than inventing a mechanism; the abstain early-return sits beside the existing sentinel abstention and reuses `messagesFR.linkUnreadable`. eslint 0 problems; prettier clean.
+- [ ] **Issue Lifecycle** — comment precedes `rad issue state --solved`; PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/max-turns-cap/verification_matrix.md`
+
+11 of 12 rows PASS; the 1 PENDING (issue lifecycle) is merge-time. The headline result is row 7, driven end to end against the verbatim stdout captured from a real `--max-turns` exhaustion: the predicate fires, the notice never reaches the parsed response, and the string Discord would receive is `messagesFR.linkUnreadable` — the French abstention, with no English control text. Suite 90/90 (was 86, +4 new tests); eslint 0 problems; prettier clean.
+
+### Residual risk carried to handover
+The notice wording was captured on **v0.20.0** while the bot runs **v0.16.0** (Pre-Computation assumption 3, LOW confidence). The pattern matches tolerantly — optional `⚠`/`⚠️` prefix, anchored on the English phrase — and a non-match degrades to today's behaviour (a best-effort summary is posted) rather than to a failure. Confirming the 0.16 wording needs one capped run on the VPS; called out in the issue's lifecycle comment.
