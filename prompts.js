@@ -64,7 +64,14 @@ const LINK_UNREADABLE_SENTINEL = 'CONTENU_INACCESSIBLE';
 // the link (e.g. a YouTube URL) isn't readable via -t web. With meta=null there's no identity
 // to match, but the abstain permission still holds — the prompt grants the same sentinel for a
 // plainly-unreadable page, so a no-embed link can abstain too. See issues 1b94451, de52e4a.
-function buildLinkPrompt(url, context, meta = null) {
+//
+// `transcript` (issue 7801304) is the video's caption text when one could be retrieved — the
+// case `-t web` cannot serve, since a YouTube watch page is not readable that way. It is a
+// SECOND ground-truth anchor, stronger than `meta`: meta says what the video claims to be,
+// the transcript says what is actually in it. When present it also SUPPRESSES the abstention,
+// because the content is by definition accessible. Defaults to null, and the block is empty in
+// that case, so a three-argument call returns the exact string it returned before this feature.
+function buildLinkPrompt(url, context, meta = null, transcript = null) {
   // Abstain-or-fabricate guard: rather than invent a summary of a page it couldn't read,
   // Hermes must reply with the sentinel (summarizeLink maps it → messagesFR.linkUnreadable).
   // Shared so the two branches emit the instruction identically and never drift. See de52e4a.
@@ -83,8 +90,21 @@ function buildLinkPrompt(url, context, meta = null) {
         `etc.), ${abstain} Ne résume jamais un contenu différent de celui indiqué ci-dessus.`
       : `\nSi tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans ` +
         `transcription accessible, etc.), ${abstain}`;
+  // Caption text, when we have it. Placed AFTER the anchor so its "do not abstain" instruction
+  // is the last word on the subject: without that, Hermes fetches the unreadable watch page,
+  // concludes it cannot access the content, and emits the sentinel while holding the transcript.
+  // The "reformule" clause keeps the reply a summary — the bot's contract — rather than a
+  // republished caption track. Empty string when absent, which is what preserves the old prompt.
+  const grounding = transcript
+    ? `\nTRANSCRIPTION DE LA VIDÉO (extraite de ses sous-titres — source de vérité prioritaire ` +
+      `sur tout ce que tu pourrais récupérer en ligne) :\n"""\n${transcript}\n"""\n` +
+      `Cette transcription peut être automatique, donc imparfaite ou tronquée : appuie-toi sur ` +
+      `le sens général et ignore les erreurs de transcription manifestes. Le contenu t'étant ` +
+      `accessible par ce biais, n'utilise PAS ${LINK_UNREADABLE_SENTINEL}. Reformule les idées ` +
+      `avec tes propres mots plutôt que de recopier la transcription.`
+    : '';
   return `Résume en français le contenu de ce lien : ${url}.
-Contexte : ${context || 'aucun'}.${anchor}
+Contexte : ${context || 'aucun'}.${anchor}${grounding}
 ${buildSummaryFormat()}`;
 }
 

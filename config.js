@@ -12,6 +12,14 @@ const path = require('path');
 const HERMES_BIN = process.env.HERMES_BIN || '/data/.local/bin/hermes';
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/data/workspace';
 
+// yt-dlp binary used to pull YouTube captions (issue 7801304). Same env-overridable shape as
+// HERMES_BIN. The default points inside WORKSPACE_DIR because this repo ships no Dockerfile —
+// the container image is managed elsewhere — so the standalone `yt-dlp_linux` build lives on
+// the persisted volume and survives a container recreate without an image rebuild. An absent
+// or broken binary is not an error: fetchTranscript resolves null and the summary degrades to
+// the embed-anchored behaviour that predates this feature.
+const YTDLP_BIN = process.env.YTDLP_BIN || path.join(WORKSPACE_DIR, 'bin', 'yt-dlp_linux');
+
 // On-disk caches live under the workspace dir.
 const CACHE_FILE = path.join(WORKSPACE_DIR, '.link_cache.json');
 const SESSION_CACHE_FILE = path.join(WORKSPACE_DIR, '.session_cache.json');
@@ -28,6 +36,24 @@ const TIMEOUT_RECAP = 120000; // 120s — channel recap summarisation
 // with headroom to spare. Exhausting the cap is treated as an abstention rather than a partial
 // summary — see summarizeLink and issue 54ed189.
 const MAX_TURNS_LINK = 10;
+
+// YouTube caption fetch (issue 7801304). The fetch is one bounded yt-dlp call made BEFORE the
+// Hermes call, so its timeout is additive to TIMEOUT_WEB — kept short because a caption pull is
+// a few small HTTPS requests, and a slow one is far likelier to be a block than a big download.
+const TIMEOUT_TRANSCRIPT = 45000; // 45s
+// Subtitle language preference, highest first: a French track when one exists, else the English
+// one. Deliberately does NOT request YouTube's `fr-en` machine translation, for two reasons found
+// while verifying this feature. Quality: `fr-en` is a machine translation OF a machine
+// transcription, so feeding it to a summariser that then writes French stacks three lossy steps,
+// where the original track stacks one. Cost: yt-dlp downloads EVERY matching track, so each extra
+// language is another request to the endpoint that answers with HTTP 429 when it decides it has
+// seen enough of you — and that endpoint is the whole feature's weak point.
+const SUBTITLE_LANGS = 'fr,en';
+// Ceiling on transcript characters spliced into the link prompt. The prompt travels as a single
+// CLI argv, so this must stay far under MAX_ARGV_PROMPT_BYTES (96 KB); it also bounds what a
+// three-hour video can cost in tokens. A longer transcript is truncated, not rejected — the
+// opening stretch of a video is normally enough to summarise what it is about.
+const TRANSCRIPT_MAX_CHARS = 12000;
 
 // A single CLI argv string is capped by the kernel (Linux MAX_ARG_STRLEN ≈ 128 KB);
 // above this ceiling the bot offloads context to a file via Hermes @file: (issue 1f154fc).
@@ -91,12 +117,16 @@ const messagesFR = {
 
 module.exports = {
   HERMES_BIN,
+  YTDLP_BIN,
   WORKSPACE_DIR,
   CACHE_FILE,
   SESSION_CACHE_FILE,
   TIMEOUT_NORMAL,
   TIMEOUT_WEB,
   TIMEOUT_RECAP,
+  TIMEOUT_TRANSCRIPT,
+  SUBTITLE_LANGS,
+  TRANSCRIPT_MAX_CHARS,
   MAX_TURNS_LINK,
   MAX_ARGV_PROMPT_BYTES,
   DISCORD_MSG_LIMIT,

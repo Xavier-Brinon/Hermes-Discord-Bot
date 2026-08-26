@@ -107,6 +107,50 @@ test('buildLinkPrompt — meta with only a title omits the author/provider claus
   assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL));
 });
 
+// --- buildLinkPrompt with a transcript (issue 7801304) ---------------------
+
+// The regression guard for the whole feature: everything that does not supply a transcript
+// must keep producing the pre-feature prompt, byte for byte, on BOTH the meta and no-meta
+// branches. If this pair ever diverges, every non-YouTube summary has silently changed.
+test('buildLinkPrompt — omitting transcript is byte-identical to transcript=null', () => {
+  const meta = { title: 'Titre', author: 'Chaîne', provider: 'YouTube' };
+  assert.equal(buildLinkPrompt('http://x', 'ctx'), buildLinkPrompt('http://x', 'ctx', null, null));
+  assert.equal(
+    buildLinkPrompt('http://x', 'ctx', meta),
+    buildLinkPrompt('http://x', 'ctx', meta, null)
+  );
+});
+
+test('buildLinkPrompt — a transcript is embedded and marked as the source of truth', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.ok(prompt.includes('le contenu parlé'));
+  assert.match(prompt, /TRANSCRIPTION DE LA VIDÉO/);
+  assert.match(prompt, /source de vérité/);
+});
+
+// Without this instruction Hermes fetches the unreadable watch page, concludes it cannot
+// reach the content, and abstains while holding the transcript.
+test('buildLinkPrompt — a transcript suppresses the abstain sentinel', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.match(prompt, new RegExp(`n'utilise PAS ${LINK_UNREADABLE_SENTINEL}`));
+});
+
+test('buildLinkPrompt — a transcript asks for a reformulation, not a copy', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.match(prompt, /Reformule les idées avec tes propres mots/);
+});
+
+test('buildLinkPrompt — transcript and meta anchors coexist', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', { title: 'Ma vidéo' }, 'parlé');
+  assert.match(prompt, /« Ma vidéo »/); // embed anchor survives
+  assert.match(prompt, /TRANSCRIPTION DE LA VIDÉO/); // transcript anchor added
+  assert.ok(prompt.includes(buildSummaryFormat()));
+});
+
+test('buildLinkPrompt — an empty-string transcript behaves as no transcript', () => {
+  assert.equal(buildLinkPrompt('http://x', 'ctx', null, ''), buildLinkPrompt('http://x', 'ctx'));
+});
+
 test('buildSummaryFormat — carries the adaptive markers the evals key off', () => {
   const f = buildSummaryFormat();
   // hasLinkStructure (evals/assertions.js) matches these — keep in sync.

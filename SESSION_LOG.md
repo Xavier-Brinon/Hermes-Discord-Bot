@@ -1102,3 +1102,59 @@ PASSED. The shipped diff matches the Pre-Flight commitment item for item: one co
 
 ### Residual risk carried to handover
 The notice wording was captured on **v0.20.0** while the bot runs **v0.16.0** (Pre-Computation assumption 3, LOW confidence). The pattern matches tolerantly — optional `⚠`/`⚠️` prefix, anchored on the English phrase — and a non-match degrades to today's behaviour (a best-effort summary is posted) rather than to a failure. Confirming the 0.16 wording needs one capped run on the VPS; called out in the issue's lifecycle comment.
+
+---
+
+# Task: youtube-transcript
+complexity_score: 6
+complexity_tier: COMPLEX
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** A new `youtube.js` exporting three functions — `isYouTube(url)` (hostname-set membership via `URL`, not a regex), `vttToText(vtt)` (delete what is not prose: header lines, cue timings, inline `<...>` tags, entities, consecutive duplicates), and `fetchTranscript(url)` (one bounded `execFile` of `yt-dlp` into a temp dir, best subtitle file wins, `null` on any failure). `summarizeLink` awaits it for YouTube URLs and threads the result into `buildLinkPrompt` as a 4th parameter that defaults to `null`. I will NOT add a transcript cache, a retry ladder, cookie/proxy/PO-token plumbing, a `VideoProvider` abstraction, a `Transcript` class, speaker diarisation, timestamp preservation, a runtime-configurable language list, or a `--js-runtimes` detection probe. The abstain gate, the `--max-turns` cap-abstention, and `summarizeLink`'s existing `execFile` body are preserved verbatim — the body moves into a helper, it is not rewritten.
+- **Scope Boundaries:**
+  - In-scope: `youtube.js` (new), `config.js`, `prompts.js`, `hermes-cli.js`, `test/youtube.test.js` (new), `test/prompts.test.js`
+  - Out-of-scope: `hermes-discord-bot-clean.js` (the change lives behind the `summarizeLink` boundary), `text.js` (tempting home for `isYouTube`, declined — it would import this concern into the mention/recap flows), `recap.js`, `cache.js` (transcript caching explicitly declined as YAGNI), `evals/`, `manage_hermes.sh`, `README.md`, `package.json` (no npm dependency — `yt-dlp` is an external binary via `execFile`, like `hermes`)
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — additive change behind one existing function boundary, with the pre-existing abstain/anchor logic relocated verbatim rather than rewritten. Secondary: `examples/patterns/minimal-scaffold.md` for `youtube.js` (three exported functions, no class, no options object, no plugin seam).
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — the failure mode is shipping a "media extraction subsystem" (provider registry + cache + retry policy + cookie/proxy config) to answer one question. Secondary: `examples/anti-patterns/bloated-loop.md` — `vttToText` is one forward pass with a single `previous` variable, not a cue-block state machine.
+
+### Assumptions
+`.artifacts/youtube-transcript/pre_computation_block.md`
+
+*(8 assumptions — 5 HIGH, 2 MEDIUM, 1 LOW. Assumptions 1–3 were **measured before coding**, not estimated: a live `yt-dlp` 2026.08.19 spike wrote `cap.en.vtt` (440 B) and `cap.fr-en.vtt` (402 B), confirmed `--js-runtimes node` clears the JS-runtime deprecation warning, and confirmed YouTube auto-translates EN captions to `fr-en` so French grounding needs no translation step. The LOW is assumption 8 — the spike ran from a **residential** IP, while the VPS is a **datacenter** IP that YouTube penalises far more aggressively. It is not resolvable from the dev machine and is carried as deploy-time row 19 of the Verification Matrix. The design fails safe: a blocked fetch returns `null`, which is byte-identical to today's behaviour.)*
+
+### Design note — why yt-dlp and not a transcript library
+The spike showed yt-dlp silently falling back to the `visionos` player client to obtain captions. YouTube rotates which client identities require a Proof-of-Origin token; tracking that rotation is the entire value of the dependency. A library that calls `/api/timedtext` directly (or a hand-rolled fetch) breaks on the next rotation. A headless browser was considered and rejected: it addresses client attestation, which is *not* the failure mode a datacenter IP hits.
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED with one declared design change. The shipped diff matches the Pre-Flight commitment: a new `youtube.js` with exactly the three promised exports (`isYouTube`, `vttToText`, `fetchTranscript`), four new constants in `config.js`, a 4th `transcript` parameter on `buildLinkPrompt` that defaults to `null`, and `summarizeLink` split into an async wrapper plus `runLinkSummary` whose body is the previous body verbatim except for the prompt argument. The abstain gate, the sentinel mapping and the `MAX_ITERATIONS_NOTICE` cap-abstention were not edited — the transcript suppresses the abstention through a prompt instruction, not through changed control flow. All nine Abstinence List items are verifiably absent. `hermes-discord-bot-clean.js` was not touched, as predicted: the change lives entirely behind the `summarizeLink` boundary, and `isYouTube` stayed out of `text.js` as declared.
+
+The one declared change: `SUBTITLE_LANGS` shipped as `fr,en` rather than the planned `fr,fr-en,en`, forced by a measured HTTP 429 during verification. Recorded in `.artifacts/youtube-transcript/simplicity_review.md` §Design change forced by measurement.
+
+### Violation Checklist
+- [x] **Complexity Creep** — Line-Count Budget FIRED: Target 130, Actual 250 (+92%). Diagnosed in `.artifacts/youtube-transcript/simplicity_review.md`, not hidden. Two causes, neither of them added logic: ~62 of the 250 lines are one-token-per-line data literals Prettier explodes (host set, replace chain, yt-dlp argv, URL lists, VTT fixture) against a 6-line allowance — the `max-turns-cap` lesson was carried forward but under-sized roughly tenfold; and the 45-line test budget contradicted the same session's Verification Matrix, which fixed 17 unit-testable rows before coding at a repo-prevailing 4–6 lines per block. Re-planned Target 240, against which Actual is +4%. Cross-checked against the Abstinence List: no item appears in the diff, so the overage is estimation error rather than disguised scope. One genuine cut was found and applied (`pickTranscript` rank-and-sort → find-first).
+- [ ] **Scope Bleed** — only the 6 declared files changed (+ `SESSION_LOG.md`, `.artifacts/`, `METRICS.md`, declared as process records). Every Out-of-Bound file untouched: `hermes-discord-bot-clean.js`, `text.js`, `recap.js`, `cache.js`, `evals/`, `manage_hermes.sh`, `README.md`, `package.json` (no npm dependency added — yt-dlp is an external binary via `execFile`, like `hermes`).
+- [ ] **Style Drift** — `youtube.js` mirrors the existing module idioms: `execFile` not `exec`, bindingless `catch {}` (issue cb42d9b), env-overridable binary path in the `HERMES_BIN` shape, `console.log`/`console.error` progress lines matching `hermes-cli.js`, and the repo's issue-referencing comment density. eslint 0 problems; prettier clean.
+- [ ] **Issue Lifecycle** — comment precedes `rad issue state`; PENDING at write time, lands at merge.
+
+### Verification Results
+`.artifacts/youtube-transcript/verification_matrix.md`
+
+18 of 20 rows PASS; the 2 PENDING are deploy-time (row 19) and merge-time (row 20). Suite 107/107 (was 90, +17 new tests); eslint 0 problems; prettier clean.
+
+The headline result is row 17, and it is more informative than its PASS suggests. The end-to-end check **failed on its first run** with `HTTP Error 429: Too Many Requests` from a residential IP, after only a handful of caption fetches, and passed on retry after a cooldown. That accident proved row 14's guarantee against a genuine block rather than a synthetic one: yt-dlp hard-failed, `fetchTranscript` returned `null`, the temp directory was still cleaned by the `finally`, nothing threw, and the summary path degraded to the pre-existing embed-anchored behaviour. It also forced the `SUBTITLE_LANGS` change, because the planned three-entry list made yt-dlp download every matching track — two or three requests per video against the one endpoint that rate-limits, of which only one file is ever read.
+
+### Residual risk carried to handover
+Assumption 8 remains the open question and is deliberately unresolved: every measurement in this session ran from a **residential** IP, while the bot runs on a **datacenter** IP, which YouTube penalises far more aggressively. Seeing a 429 on the friendlier of the two cases downgrades the outlook rather than improving it; cutting the language list halves the request rate but does not remove the risk. Row 19 is the deploy-time check that settles it, and the issue records the fallback ladder (cookies → PO-token provider → residential proxy → hosted transcript API) if it fails.
+
+The cost of that failure is bounded by design and was measured, not assumed: a permanently blocked fetch is the `null` path, which is byte-identical to the behaviour that shipped before this feature — guarded by the row 9 regression test on both the meta and no-meta prompt branches. The feature is therefore safe to deploy even if row 19 fails outright; it simply would not do anything.
+
+Secondary residual: the caption endpoint is a moving target. yt-dlp was observed falling back to the `visionos` player client to obtain captions, which is exactly the client-rotation behaviour the dependency was chosen for, but it also means the working path today is not guaranteed to be the working path next month. `YTDLP_BIN` on the persisted volume makes updating the binary a file copy rather than an image rebuild.

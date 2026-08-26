@@ -24,6 +24,7 @@ const {
   MAX_ITERATIONS_NOTICE,
 } = require('./prompts');
 const { unwrapText } = require('./text');
+const { isYouTube, fetchTranscript } = require('./youtube');
 
 // Monotonic suffix so concurrent recaps never collide on a temp filename.
 let contextFileSeq = 0;
@@ -146,10 +147,24 @@ function askHermes(
 // read the real content behind the link. `meta` ({ title, author, provider } from the Discord
 // embed) anchors the summary on the link's known identity so Hermes can't fabricate a
 // different video/page — see buildLinkPrompt and issue 1b94451.
-function summarizeLink(url, context, meta = null) {
+async function summarizeLink(url, context, meta = null) {
+  // A YouTube watch page is not readable via -t web, so pull its captions first and let them
+  // ground the prompt (issue 7801304). fetchTranscript never throws — a video without captions,
+  // a missing yt-dlp, a timeout, or a block from YouTube all return null, and a null transcript
+  // makes buildLinkPrompt emit exactly the prompt it emitted before this feature. The fetch is
+  // sequential with the Hermes call, so its timeout adds to TIMEOUT_WEB; TIMEOUT_TRANSCRIPT is
+  // sized accordingly.
+  const transcript = isYouTube(url) ? await fetchTranscript(url) : null;
+  return runLinkSummary(url, context, meta, transcript);
+}
+
+// The Hermes half of summarizeLink, unchanged from before the transcript feature apart from
+// passing `transcript` through to the prompt. Split out only so summarizeLink can await the
+// caption fetch without wrapping the whole execFile body in an async promise executor.
+function runLinkSummary(url, context, meta, transcript) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    const prompt = buildLinkPrompt(url, context, meta);
+    const prompt = buildLinkPrompt(url, context, meta, transcript);
 
     console.log(`📤 Summarizing link: ${url}`);
 
