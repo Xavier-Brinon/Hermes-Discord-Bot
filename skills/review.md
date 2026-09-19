@@ -31,7 +31,7 @@ standard protocol plus explicit user confirmation per
 ## Required context
 
 - **Schema:** `schemas/artifacts.md` §5 (Session Journal) and §6 (Adherence Report)
-- **Enforcement rules:** `CLAUDE.md` §Enforcement (Instant Fail clauses)
+- **Enforcement rules:** `AGENTS.md` §Enforcement (Instant Fail clauses)
 - **Tool:** `tools/review/scope-adherence.sh` — mechanical Scope Adherence Check
 - **Linter:** `tools/review/lint-frontmatter.sh` — trip-wire per ADR P2.D8
 - **Gold Standard:** `examples/patterns/surgical-diff.md` — style-drift reference
@@ -72,7 +72,7 @@ standard protocol plus explicit user confirmation per
    exit code. The tool emits the mechanical fields of the Adherence
    Report; you fill the semantic fields below.
 6. **Compare Post-Flight Reflex Audit against the actual diff.** Apply
-   the three **Instant Fail** rules from `CLAUDE.md` §Enforcement
+   the three **Instant Fail** rules from `AGENTS.md` §Enforcement
    verbatim:
    - **Journal mismatch.** Pre-Flight Simplicity Goal commits to *X*;
      Post-Flight Reflex Audit reports `PASSED`; the diff visibly

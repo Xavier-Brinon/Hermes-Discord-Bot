@@ -2,7 +2,7 @@
 
 > The project's perpetual identity statement: _what_ it is for, _who_ it serves,
 > and _what success looks like_. Depth lives in the artifacts referenced here
-> (`README.md`, `CLAUDE.md`, Radicle issues), not inlined.
+> (`README.md`, `AGENTS.md`, Radicle issues), not inlined.
 
 ## What
 
@@ -45,7 +45,7 @@ terminal output, rather than calling a hosted API.
 ## See also
 
 - `README.md` — operational runbook (start/stop/watchdog/troubleshooting).
-- `CLAUDE.md` — architecture, conventions, Radicle workflow, `@YackShavingSkill`
+- `AGENTS.md` — architecture, conventions, Radicle workflow, `@YackShavingSkill`
   master rules.
 - `CONTEXT.md` — domain glossary.
 - Radicle issues (`rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`) — the tracked backlog.

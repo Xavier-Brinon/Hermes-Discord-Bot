@@ -30,7 +30,7 @@ Reviewer cannot emit by construction:
 
 All three findings emit as **warnings, never Instant Fails** — per
 `plan_phase_3.org` Decision D4. The three inherited Instant Fail
-rules from `CLAUDE.md` §Enforcement (Journal mismatch, Line-Count
+rules from `AGENTS.md` §Enforcement (Journal mismatch, Line-Count
 Budget breach, Out-of-Bound violation) remain unchanged.
 
 ## Activation
@@ -55,7 +55,7 @@ route to the standard Reviewer at `skills/review.md` instead.
   with 3 more.
 - **Schema:** `schemas/artifacts.md` §5 (Session Journal) and §6
   (Adherence Report).
-- **Enforcement rules:** `CLAUDE.md` §Enforcement — three Instant
+- **Enforcement rules:** `AGENTS.md` §Enforcement — three Instant
   Fail clauses inherited unchanged.
 - **Full session history:** `SESSION_LOG.md` — ALL prior `# Task:`
   sections, not only the current one.
@@ -108,7 +108,7 @@ Decision D7.
    exit code. The tool emits the mechanical fields of the Adherence
    Report; you fill the semantic fields below.
 6. **Compare Post-Flight Reflex Audit against the actual diff.** Apply
-   the three **Instant Fail** rules from `CLAUDE.md` §Enforcement
+   the three **Instant Fail** rules from `AGENTS.md` §Enforcement
    verbatim:
    - **Journal mismatch.** Pre-Flight Simplicity Goal commits to *X*;
      Post-Flight Reflex Audit reports `PASSED`; the diff visibly

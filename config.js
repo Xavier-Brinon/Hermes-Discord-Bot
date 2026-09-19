@@ -77,7 +77,7 @@ const SUMMARY_REACTION = '📝';
 const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 
-// All Discord-facing bot text is French (see CLAUDE.md). {botName} is substituted at use.
+// All Discord-facing bot text is French (see AGENTS.md). {botName} is substituted at use.
 const messagesFR = {
   greeting:
     '👋 Bonjour ! Je suis {botName}, votre assistant IA Hermes.\n' +

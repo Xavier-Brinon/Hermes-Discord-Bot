@@ -3,7 +3,7 @@
 #+startup: showall indent
 
 This project follows the =@YackShavingSkill= framework. The enforceable master
-rules live in [[file:CLAUDE.md][CLAUDE.md]] and the machinery in the vendored =skills/=, =schemas/=,
+rules live in [[file:AGENTS.md][AGENTS.md]] and the machinery in the vendored =skills/=, =schemas/=,
 =templates/=, =examples/=, and =tools/= directories. This document is the
 explanatory companion: the framework's /process vocabulary/, used identically
 across every project that adopts it. This project's own /domain/ language is

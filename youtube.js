@@ -89,7 +89,7 @@ function vttToText(vtt, maxChars = TRANSCRIPT_MAX_CHARS) {
 }
 
 // Run yt-dlp for `url`, writing subtitle files into `dir`. execFile, never exec — the URL comes
-// from a Discord message, and no shell means no command injection (CLAUDE.md).
+// from a Discord message, and no shell means no command injection (AGENTS.md).
 function runYtDlp(url, dir) {
   return new Promise((resolve, reject) => {
     execFile(

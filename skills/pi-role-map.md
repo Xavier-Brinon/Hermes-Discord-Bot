@@ -12,7 +12,7 @@ discipline (`CHANGELOG.md`).
 
 Pi's three agents invoke skill files directly per this map. Non-Pi
 consumers (Claude Code, other LLM agents) follow the same map with
-explicit user confirmation per `skills/orchestrator.md` and `CLAUDE.md`
+explicit user confirmation per `skills/orchestrator.md` and `AGENTS.md`
 §Mandatory Workflow step 8.
 
 ## Mapping
@@ -54,7 +54,7 @@ preamble blocks.
 
 - `adr_p3_d5_pi_binding.org` §Consequences-Option-A — charter for this
   document (obligation #3).
-- `CLAUDE.md` §Skills + §Mandatory Workflow step 8 — top-level entry
+- `AGENTS.md` §Skills + §Mandatory Workflow step 8 — top-level entry
   point that names Pi's Review agent and points downward at the skill
   files this map indexes.
 - `skills/orchestrator.md` — source for the `complexity_tier`
