@@ -47,13 +47,7 @@ test('recap — exports parseTimeframe + the moved fetchChannelHistory/scanChann
 
 test('cache — exports the accessor API', () => {
   const cache = require('../cache');
-  for (const fn of [
-    'getSessionKey',
-    'getCachedLink',
-    'setCachedLink',
-    'getSessionId',
-    'setSessionId',
-  ]) {
+  for (const fn of ['getCachedLink', 'setCachedLink', 'findSessionId', 'recordSession']) {
     assert.equal(typeof cache[fn], 'function', `cache.${fn} not a function`);
   }
 });

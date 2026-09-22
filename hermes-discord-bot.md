@@ -10,7 +10,7 @@ A French-language Discord assistant for a single community server ("Le Mistral")
 powered by the **Hermes Agent CLI**. The bot does three things:
 
 - **Answers** `@mentions` and DMs in French, with conversation continuity across
-  follow-ups (Hermes sessions, cached per channel/thread).
+  follow-ups (Hermes sessions, cached per reply chain; threads/DMs per place).
 - **Summarises** article links posted in channels — a structured summary with an
   adaptive **Thèse centrale**/**Idée principale**, **Arguments clés**, and
   **Questions** (see `buildSummaryFormat`); the same shape when a link is

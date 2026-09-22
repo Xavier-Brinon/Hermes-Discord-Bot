@@ -1158,3 +1158,48 @@ Assumption 8 remains the open question and is deliberately unresolved: every mea
 The cost of that failure is bounded by design and was measured, not assumed: a permanently blocked fetch is the `null` path, which is byte-identical to the behaviour that shipped before this feature — guarded by the row 9 regression test on both the meta and no-meta prompt branches. The feature is therefore safe to deploy even if row 19 fails outright; it simply would not do anything.
 
 Secondary residual: the caption endpoint is a moving target. yt-dlp was observed falling back to the `visionos` player client to obtain captions, which is exactly the client-rotation behaviour the dependency was chosen for, but it also means the working path today is not guaranteed to be the working path next month. `YTDLP_BIN` on the persisted volume makes updating the binary a file copy rather than an image rebuild.
+
+# Task: reply-chain-sessions
+complexity_score: 5
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One Map with two key shapes — `msg:<answerId>` for every answer message the bot posts, and the place key for a thread or DM. An incoming mention resumes the replied-to answer's session, else its thread/DM's, else nothing. 500-entry FIFO cap in the `PROCESSED_MESSAGES` idiom. I will NOT walk the reply chain over REST, key by user, lock per channel, add a TTL/LRU clock, migrate the legacy cache file, or seed sessions from 📝 summaries (issue 576af84).
+- **Scope Boundaries:**
+  - In-scope: `cache.js`, `text.js` (sendLongResponse return value), `hermes-discord-bot-clean.js` (Q&A session lines only), `test/cache.test.js` (new), `test/modules.test.js`, `test/text.test.js`
+  - Out-of-scope: `prompts.js`, `hermes-cli.js`, `recap.js`, `config.js`, `youtube.js`, the link cache, the 📝 summary path, the DM guild-check bug (orthogonal, reported separately)
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — the session lookup is swapped behind the same two call sites; `--resume` plumbing untouched.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no "conversation manager" class, no per-user/TTL/lock layers.
+
+### Assumptions
+`.artifacts/reply-chain-sessions/pre_computation_block.md`
+
+*(6 assumptions — 5 HIGH, 1 MEDIUM: the 500 cap. Design refinement recorded vs the issue text: threads and DMs also resume by place, because people type follow-ups there without Discord's reply button.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The diff is the Pre-Flight Simplicity Goal and nothing more: one `sessions` Map with two key shapes (`msg:<answerId>` and a thread/DM place key), `findSessionId` (reply first, then place, else a fresh chain), `recordSession` (every posted chunk + the place it landed in), and a 500-entry FIFO cap in the `PROCESSED_MESSAGES` idiom. `sendLongResponse` now resolves to the posted messages — its two chunk loops collapsed into one on the way. The bot's Q&A path swapped key/get/set for one lookup and one record, and records AFTER posting (assumption 6). All Abstinence List items are absent: no REST chain walk, no per-user keys, no lock, no TTL, no cache migration, no 📝 seeding.
+
+### Violation Checklist
+- [x] **Complexity Creep** — Line-Count Budget FIRED: Target 90, Actual 123 net (+37%). Source is +12 net, under its allowance; the overage is test sizing — 10 matrix rows were fixed before coding but the budget sized ~7, and omitted ~20 lines of shared duck-typed fixtures. Re-planned Target 125, Actual −2%. Diagnosed in `.artifacts/reply-chain-sessions/simplicity_review.md`.
+- [ ] **Scope Bleed** — none. Two doc files (`CONTEXT.md` Session glossary, `hermes-discord-bot.md`) added as a declared Post-Flight Touch List addition: both still said sessions were "cached per channel/thread". Every Out-of-Bound file untouched.
+- [ ] **Style Drift** — none. eslint 0 problems; prettier clean.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge (comment precedes `rad issue state`).
+
+### Verification Results
+`.artifacts/reply-chain-sessions/verification_matrix.md`
+
+9 of 11 rows PASS; 2 PENDING (deploy-time live Discord check, merge-time lifecycle comment). Suite 117/117 (was 107, +10 new: 7 in `test/cache.test.js`, 3 in `test/text.test.js`).
+
+### Residual risk carried to handover
+- **DMs are broken independently of this task.** `message.channel.type === 'DM'` compares a discord.js v13 string against the v14 numeric `ChannelType.DM` (verified `=== 1`), so `isDirectMessage` is always false and a DM throws at `message.guild.id`. The DM branch of `placeKey` is correct but unreachable until that is fixed — reported to the user as a separate issue.
+- Legacy plain-channel keys in `.session_cache.json` on the VPS are never read again; they sit at the old end of the FIFO and are evicted as new answers are recorded. Legacy thread keys share the new format and keep resuming.
+- A reply to an answer posted before the deploy starts fresh (no `msg:` key exists for it) — one-time, expected.

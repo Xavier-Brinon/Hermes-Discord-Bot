@@ -30,13 +30,7 @@ const {
   sendLongResponse,
 } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
-const {
-  getSessionKey,
-  getCachedLink,
-  setCachedLink,
-  getSessionId,
-  setSessionId,
-} = require('./cache');
+const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
 const { askHermes, summarizeLink } = require('./hermes-cli');
 
 // Bound the dedup set so a long-lived process can't leak memory. Discord only fires
@@ -365,25 +359,21 @@ client.on('messageCreate', async (message) => {
       const wantsSummary = LINK_PATTERN.test(content);
       if (wantsSummary) useWeb = true;
 
-      // Get session key and resume previous conversation if available
-      const sessionKey = getSessionKey(message);
-      const previousSessionId = getSessionId(sessionKey);
-
+      // Resume the conversation this message continues — the replied-to answer's, else the
+      // thread/DM's; a fresh @mention in a channel starts a new one (issue 244bad7).
       const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, {
         extraContext,
         useWebTools: useWeb,
-        sessionId: previousSessionId,
+        sessionId: findSessionId(message),
         summarize: wantsSummary,
       });
       const formattedResponse = formatHermesResponse(hermesResponse);
 
-      // Save session ID for next follow-up in this channel/thread
-      if (newSessionId) {
-        setSessionId(sessionKey, newSessionId);
-      }
-
       // Name the thread after the question so multiple threads in a channel stay distinct.
-      await sendLongResponse(message, formattedResponse, buildThreadTitle(content));
+      const answers = await sendLongResponse(message, formattedResponse, buildThreadTitle(content));
+
+      // Key the session on the posted answer(s) so a reply to them continues this chain.
+      if (newSessionId) recordSession(newSessionId, answers);
       await finalizeReaction(message, '✅');
     } catch (error) {
       console.error('Error:', error);

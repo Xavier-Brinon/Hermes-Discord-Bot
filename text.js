@@ -212,33 +212,27 @@ function buildThreadTitle(raw) {
 // Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
 // and post the chunks — directly in a thread, or in a new thread otherwise. `threadTitle`
 // names a freshly-created thread (default keeps the old generic title); callers derive a
-// content-reflecting one via buildThreadTitle (issue a4f5bc2).
+// content-reflecting one via buildThreadTitle (issue a4f5bc2). Resolves to the posted
+// Message(s).
 async function sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITLE) {
   if (text.length <= DISCORD_MSG_LIMIT) {
     // Fits in one message — simple reply
-    await message.reply(text);
-    return;
+    return [await message.reply(text)];
   }
 
   const chunks = splitAtBoundaries(text, DISCORD_MSG_LIMIT);
 
-  // If already in a thread, post chunks directly — no sub-thread
-  if (message.channel.isThread()) {
-    for (const chunk of chunks) {
-      await message.channel.send(chunk);
-    }
-    return;
-  }
+  // If already in a thread, post chunks directly — no sub-thread; otherwise create one.
+  const target = message.channel.isThread()
+    ? message.channel
+    : await message.startThread({ name: threadTitle, autoArchiveDuration: 60 });
 
-  // Create a thread and post chunks
-  const thread = await message.startThread({
-    name: threadTitle,
-    autoArchiveDuration: 60,
-  });
-
+  // Collect every posted message so the caller can key the session on them (issue 244bad7).
+  const posted = [];
   for (const chunk of chunks) {
-    await thread.send(chunk);
+    posted.push(await target.send(chunk));
   }
+  return posted;
 }
 
 module.exports = {

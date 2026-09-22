@@ -14,6 +14,7 @@ const {
   splitAtBoundaries,
   safeReply,
   buildThreadTitle,
+  sendLongResponse,
 } = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
@@ -282,4 +283,42 @@ test('buildThreadTitle — never splits a surrogate-pair emoji when truncating',
   const result = buildThreadTitle('😀'.repeat(100)); // 100 code points of emoji, over the cap
   assert.ok(Array.from(result).length <= 100, 'stays within cap');
   assert.ok(result.endsWith('😀…'), 'last kept char is a whole emoji, not half a surrogate pair');
+});
+
+// --- sendLongResponse -----------------------------------------------------
+// Resolves to the posted Message(s) so the bot can key the session on them (issue 244bad7).
+
+// A duck-typed channel that records sends and returns a fake Message placed in it.
+function fakeChannel(isThread) {
+  const channel = { isThread: () => isThread, sent: [] };
+  channel.send = async (text) => {
+    const msg = { id: `m${channel.sent.length}`, channel, text };
+    channel.sent.push(msg);
+    return msg;
+  };
+  return channel;
+}
+
+test('sendLongResponse — short text: one reply, returned in an array', async () => {
+  const reply = { id: 'r1' };
+  const message = { channel: fakeChannel(false), reply: async () => reply };
+  assert.deepEqual(await sendLongResponse(message, 'court'), [reply]);
+});
+
+test('sendLongResponse — long text in a thread: returns every chunk posted there', async () => {
+  const channel = fakeChannel(true);
+  const posted = await sendLongResponse({ channel }, 'Phrase. '.repeat(600));
+  assert.ok(posted.length > 1, 'split into several chunks');
+  assert.deepEqual(posted, channel.sent);
+});
+
+test('sendLongResponse — long text in a channel: returns the chunks of the new thread', async () => {
+  const thread = fakeChannel(true);
+  const message = { channel: fakeChannel(false), startThread: async () => thread };
+  const posted = await sendLongResponse(message, 'Phrase. '.repeat(600));
+  assert.ok(posted.length > 1);
+  assert.ok(
+    posted.every((m) => m.channel === thread),
+    'all chunks landed in the new thread'
+  );
 });
