@@ -9,6 +9,3 @@ examples/
 templates/
 schemas/
 tools/
-
-# Tool-managed config (Serena MCP)
-.serena/
