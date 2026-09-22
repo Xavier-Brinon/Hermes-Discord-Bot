@@ -219,8 +219,8 @@ client.on('messageCreate', async (message) => {
   // still NOT @everyone/@here, a role the bot holds, or a reply to someone else.
   // message.mentions.has() counted all of those (issue f482c08); we opt reply-to-bot
   // back in explicitly (issue 92b16a6).
-  const isMentioned =
-    mentionsUser(message.content, client.user.id) || isReplyTo(message, client.user.id);
+  const isReplyToBot = isReplyTo(message, client.user.id);
+  const isMentioned = mentionsUser(message.content, client.user.id) || isReplyToBot;
   const isDirectMessage = message.channel.type === 'DM';
 
   // --- Server restriction ---
@@ -249,7 +249,11 @@ client.on('messageCreate', async (message) => {
     message.channel.sendTyping();
 
     try {
-      if (content.toLowerCase().includes('aide') || content.toLowerCase().includes('help')) {
+      // Help and recap are keyword-triggered, so they only apply to a fresh @mention: a reply to
+      // the bot continues a conversation, where "historique" or "ça m'aide" is just a word
+      // (issue 86a3d87).
+      const lower = content.toLowerCase();
+      if (!isReplyToBot && (lower.includes('aide') || lower.includes('help'))) {
         const helpMessage =
           messagesFR.helpTitle +
           '\n\n' +
@@ -259,7 +263,7 @@ client.on('messageCreate', async (message) => {
       }
 
       // --- Channel history / recap request ---
-      if (HISTORY_PATTERN.test(content) && !isDirectMessage) {
+      if (!isReplyToBot && HISTORY_PATTERN.test(content) && !isDirectMessage) {
         console.log('📜 History/recap request detected, fetching channel history...');
         await message.react('👀');
 
@@ -358,9 +362,7 @@ client.on('messageCreate', async (message) => {
       // A reply to a `❓` summary question: tell Hermes which question is being answered. The
       // summary's own session (recorded on the question message) is resumed below, so it
       // already holds the article (issue 576af84).
-      const replied = isReplyTo(message, client.user.id)
-        ? await message.fetchReference().catch(() => null)
-        : null;
+      const replied = isReplyToBot ? await message.fetchReference().catch(() => null) : null;
       const question = questionFrom(replied?.content);
 
       // Inject last summarized link as context for follow-up questions — except for a question
