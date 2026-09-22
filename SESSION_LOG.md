@@ -1203,3 +1203,48 @@ PASSED. The diff is the Pre-Flight Simplicity Goal and nothing more: one `sessio
 - **DMs are broken independently of this task.** `message.channel.type === 'DM'` compares a discord.js v13 string against the v14 numeric `ChannelType.DM` (verified `=== 1`), so `isDirectMessage` is always false and a DM throws at `message.guild.id`. The DM branch of `placeKey` is correct but unreachable until that is fixed — reported to the user as a separate issue.
 - Legacy plain-channel keys in `.session_cache.json` on the VPS are never read again; they sit at the old end of the FIFO and are evicted as new answers are recorded. Legacy thread keys share the new format and keep resuming.
 - A reply to an answer posted before the deploy starts fresh (no `msg:` key exists for it) — one-time, expected.
+
+# Task: summary-questions
+complexity_score: 5
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Prompt asks for `1. **Titre** :` points and numbered questions (fitting unwrapText's existing markers); a pure `splitQuestions` cuts the questions off each summary, null on anything unexpected; the bot posts each question as a `❓` reply and records the summary's own Hermes session on it with 244bad7's `recordSession`; a reply to a `❓` message is prefixed with its question. I will NOT walk the reply chain, store question text, change unwrapText, request JSON from Hermes, add a reaction trigger, or build a link eval runner.
+- **Scope Boundaries:**
+  - In-scope: `prompts.js`, `hermes-cli.js`, `hermes-discord-bot-clean.js`, `test/prompts.test.js`, `CONTEXT.md`
+  - Out-of-scope: `text.js`, `cache.js`, `evals/`, `recap.js`, `config.js`, `youtube.js`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — reuse recordSession and the reply-resume path from 244bad7 instead of a second mechanism.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no question store, no JSON protocol, no reaction layer.
+
+### Assumptions
+`.artifacts/summary-questions/pre_computation_block.md`
+
+*(7 assumptions — 5 HIGH, 2 MEDIUM: `--resume` on a `--max-turns` link session, and model format compliance. Both only verifiable live; the parser falls back to today's output, so a miss degrades to current behaviour.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The diff is the Pre-Flight goal: a digit-first numbered format, a pure `splitQuestions` that returns null on anything but 2+ numbered question lines, `summarizeLink` returning `{ summary, sessionId }`, a best-effort `postQuestions` that posts `❓` replies and records the summary's session with 244bad7's `recordSession`, and a reply-to-question prefix. Both summary paths (📝 and @mentioned link) split. A reply to a question also skips the "latest link in this channel" hint, which could name a different article than the resumed session's. No reply-chain walk, no question store, no unwrapText change, no JSON protocol.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — 177 net vs 150 (+18%), under the trigger. Diagnosed in simplicity_review.md.
+- [ ] **Scope Bleed** — none; CONTEXT.md table re-padded by prettier (whitespace only).
+- [ ] **Style Drift** — none.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/summary-questions/verification_matrix.md`
+
+7 of 10 rows PASS; 3 PENDING (2 live Discord checks at deploy, lifecycle at merge). Suite 124/124 (+7). A scratchpad run of the real `unwrapText` on the old bold-first output reproduced the screenshot bug exactly (`**Points clés** : **1. Performances**` glued onto one line), which confirms assumption 4. The same run showed the parser still splits when unwrapText glues the header onto the previous line.
+
+### Residual risk carried to handover
+- Model compliance with the new format is only verifiable live (no link eval runner; local Hermes 0.20 can't reach Mistral, 1ae5380). Miss = today's single message.
+- `--resume` on a `--max-turns` link session is assumed, not observed (assumption 3). If it fails, askHermes errors and the member gets the generic error reply; the admin DM will show it.
+- The @mention path still carries buildAskPrompt's "paragraphes continus" line ahead of the format; plain Q&A must stay byte-identical, so it was not touched.

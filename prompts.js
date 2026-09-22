@@ -18,13 +18,63 @@
 // informational content (news) — so a neutral article isn't forced to invent a thesis.
 // evals/assertions.js hasLinkStructure() keys off the "Thèse centrale"/"Idée principale"
 // + "Questions" markers this emits — keep them in sync.
+//
+// Points and questions are numbered lines that START with the digit (`1. **Titre** :`, not
+// `**1. Titre**`): text.js unwrapText glues every line that doesn't open with a marker onto the
+// previous one, and "digit + ." is a marker while "**" is not — that is what put point 1 on the
+// "Points clés" line. The blank lines keep section headers off the previous section, and the
+// numbered questions are what splitQuestions() below parses (issue 576af84).
 function buildSummaryFormat() {
-  return `Structure ta réponse en français, en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping), ainsi :
+  return `Structure ta réponse en français ainsi, avec une ligne vide entre chaque section et sans titres Markdown (#) :
 Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
+
 **Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
-**Arguments clés** (ou **Points clés** si non argumentatif) : une liste — chaque point commence par **un titre en gras**, suivi de deux ou trois phrases.
-**Questions** : trois questions ouvertes qui prolongent la réflexion.
-Sois concis.`;
+
+**Arguments clés** (ou **Points clés** si non argumentatif) :
+1. **Titre du point** : deux ou trois phrases.
+2. **Titre du point** : deux ou trois phrases.
+(trois ou quatre points, un par ligne)
+
+**Questions** :
+1. Première question ouverte qui prolonge la réflexion ?
+2. Deuxième question ?
+3. Troisième question ?
+
+À l'intérieur d'un point ou d'une question, écris d'une traite, sans saut de ligne. Sois concis.`;
+}
+
+// Cut the questions block off a summary so each question can be posted as its own message
+// (issue 576af84). Returns { body, questions } — body is everything before the LAST
+// "**Questions**" header (unwrapText may have glued the header onto the previous line, so it
+// is matched mid-line too), questions the text of each numbered line after it. Returns null
+// whenever the tail is anything but 2+ numbered lines, so the caller posts the summary
+// unchanged: a miss degrades to today's single message, never to lost content.
+function splitQuestions(summary) {
+  const at = (summary || '').lastIndexOf('**Questions**');
+  if (at === -1) return null;
+  const body = summary.slice(0, at).trim();
+  const tail = summary
+    .slice(at + '**Questions**'.length)
+    .replace(/^\s*:/, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const questions = tail.map((l) => l.match(/^\d+[.)]\s+(.+)$/)?.[1]);
+  if (!body || questions.length < 2 || questions.some((q) => !q)) return null;
+  return { body, questions };
+}
+
+// A posted question message is `❓ <question>`. A reply to one tells Hermes which question the
+// member is answering; the rest of the context comes from resuming the summary's own session.
+const QUESTION_PREFIX = '❓ ';
+
+// The question in a bot message's text, or null if it isn't a question message.
+function questionFrom(text) {
+  return text?.startsWith(QUESTION_PREFIX) ? text.slice(QUESTION_PREFIX.length).trim() : null;
+}
+
+function buildQuestionReply(question, reply) {
+  return `En réponse à ta question « ${question} » : ${reply}`;
 }
 
 // Q&A prompt (hermes-discord-bot-clean.js askHermes). When summarize=true (the user
@@ -194,6 +244,10 @@ module.exports = {
   buildAskPromptWithContextFile,
   buildLinkPrompt,
   buildSummaryFormat,
+  splitQuestions,
+  QUESTION_PREFIX,
+  questionFrom,
+  buildQuestionReply,
   buildRecapPrompt,
   extractThemes,
   parseHermesOutput,

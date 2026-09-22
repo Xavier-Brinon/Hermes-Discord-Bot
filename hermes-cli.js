@@ -142,9 +142,10 @@ function askHermes(
   });
 }
 
-// Summarize a link via Hermes with web tools. Returns the formatted summary string, or the
-// honest `messagesFR.linkUnreadable` when Hermes reports (via the sentinel) that it could not
-// read the real content behind the link. `meta` ({ title, author, provider } from the Discord
+// Summarize a link via Hermes with web tools. Resolves to { summary, sessionId }: the formatted
+// summary string (or the honest `messagesFR.linkUnreadable` when Hermes reports (via the sentinel) that it could not
+// read the real content behind the link), and the Hermes session that produced it — the bot
+// resumes it when a member replies to one of the summary questions (issue 576af84). `meta` ({ title, author, provider } from the Discord
 // embed) anchors the summary on the link's known identity so Hermes can't fabricate a
 // different video/page — see buildLinkPrompt and issue 1b94451.
 async function summarizeLink(url, context, meta = null) {
@@ -215,20 +216,22 @@ function runLinkSummary(url, context, meta, transcript) {
         // parseHermesOutput strips the notice from the response. See issue 54ed189.
         if (MAX_ITERATIONS_NOTICE.test(stdout || '')) {
           console.log(`⚠️  Link summary hit the ${MAX_TURNS_LINK}-turn cap — abstaining`);
-          return resolve(messagesFR.linkUnreadable);
+          return resolve({ summary: messagesFR.linkUnreadable, sessionId: null });
         }
         // Parse Hermes -Q output, then unwrap terminal line-breaks.
-        let { response } = parseHermesOutput(stdout, stderr);
+        let { response, sessionId } = parseHermesOutput(stdout, stderr);
         response = unwrapText(response);
         // Anchor abstention: Hermes emits the sentinel when the fetched content doesn't match
         // the link's known title/author (or it couldn't read it) — post an honest message
         // instead of a fabricated summary. See issue 1b94451.
         if (response && new RegExp(`\\b${LINK_UNREADABLE_SENTINEL}\\b`).test(response)) {
-          return resolve(messagesFR.linkUnreadable);
+          return resolve({ summary: messagesFR.linkUnreadable, sessionId: null });
         }
-        resolve(
-          response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`
-        );
+        resolve({
+          summary:
+            response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`,
+          sessionId,
+        });
       }
     );
   });

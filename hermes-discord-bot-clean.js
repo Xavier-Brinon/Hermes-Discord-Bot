@@ -18,7 +18,14 @@ const {
   DISCORD_MSG_LIMIT,
   TIMEOUT_RECAP,
 } = require('./config');
-const { buildRecapPrompt, extractThemes } = require('./prompts');
+const {
+  buildRecapPrompt,
+  extractThemes,
+  splitQuestions,
+  QUESTION_PREFIX,
+  questionFrom,
+  buildQuestionReply,
+} = require('./prompts');
 const {
   extractLinks,
   extractLinkMeta,
@@ -151,6 +158,23 @@ async function finalizeReaction(message, resultEmoji) {
     await message.react(resultEmoji);
   } catch {
     // Reaction cleanup is best-effort.
+  }
+}
+
+// Post each summary question as its own `❓` message replying to `anchor` (the last summary
+// message), so a member can reply to one question specifically. Each records the summary's
+// Hermes session, so a reply resumes it with the article still in context (issue 576af84).
+// Best-effort: the summary is already posted, so a failure here must not trigger the caller's
+// error path (which would delete it) — log instead.
+async function postQuestions(anchor, questions, sessionId) {
+  try {
+    const posted = [];
+    for (const question of questions) {
+      posted.push(await anchor.reply(`${QUESTION_PREFIX}${question}`));
+    }
+    if (sessionId) recordSession(sessionId, posted);
+  } catch (e) {
+    console.error('Posting summary questions failed:', e.message);
   }
 }
 
@@ -331,13 +355,22 @@ client.on('messageCreate', async (message) => {
       // Add 👀 reaction to signal processing
       await message.react('👀');
 
-      // Inject last summarized link as context for follow-up questions
+      // A reply to a `❓` summary question: tell Hermes which question is being answered. The
+      // summary's own session (recorded on the question message) is resumed below, so it
+      // already holds the article (issue 576af84).
+      const replied = isReplyTo(message, client.user.id)
+        ? await message.fetchReference().catch(() => null)
+        : null;
+      const question = questionFrom(replied?.content);
+
+      // Inject last summarized link as context for follow-up questions — except for a question
+      // reply, where "the latest link in this channel" may be a different article.
       let lastLink = getCachedLink(message.channel.id);
       let extraContext = null;
       let useWeb = false;
 
       // If no cached link but question references an article, scan channel history
-      if (!lastLink && /article|lien|post|url|page/i.test(content)) {
+      if (!question && !lastLink && /article|lien|post|url|page/i.test(content)) {
         console.log('🔍 No cached link, scanning channel for recent links...');
         const recentLinks = await scanChannelForLinks(message.channel);
         if (recentLinks.length > 0) {
@@ -346,7 +379,7 @@ client.on('messageCreate', async (message) => {
           useWeb = true;
           console.log(`📎 Found ${recentLinks.length} recent link(s) in channel`);
         }
-      } else if (lastLink) {
+      } else if (!question && lastLink) {
         extraContext = `Le dernier article résumé dans ce canal est : ${lastLink}`;
         useWeb = true;
       }
@@ -361,19 +394,29 @@ client.on('messageCreate', async (message) => {
 
       // Resume the conversation this message continues — the replied-to answer's, else the
       // thread/DM's; a fresh @mention in a channel starts a new one (issue 244bad7).
-      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(content, {
-        extraContext,
-        useWebTools: useWeb,
-        sessionId: findSessionId(message),
-        summarize: wantsSummary,
-      });
+      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(
+        question ? buildQuestionReply(question, content) : content,
+        {
+          extraContext,
+          useWebTools: useWeb,
+          sessionId: findSessionId(message),
+          summarize: wantsSummary,
+        }
+      );
       const formattedResponse = formatHermesResponse(hermesResponse);
+      // An @mentioned link gets the same ❓ question split as a 📝 summary (issue 576af84).
+      const split = wantsSummary ? splitQuestions(formattedResponse) : null;
 
       // Name the thread after the question so multiple threads in a channel stay distinct.
-      const answers = await sendLongResponse(message, formattedResponse, buildThreadTitle(content));
+      const answers = await sendLongResponse(
+        message,
+        split ? split.body : formattedResponse,
+        buildThreadTitle(content)
+      );
 
       // Key the session on the posted answer(s) so a reply to them continues this chain.
       if (newSessionId) recordSession(newSessionId, answers);
+      if (split) await postQuestions(answers.at(-1), split.questions, newSessionId);
       await finalizeReaction(message, '✅');
     } catch (error) {
       console.error('Error:', error);
@@ -432,8 +475,7 @@ async function summariseLinks(message, links) {
     let firstError;
     for (const link of linksToProcess) {
       try {
-        const summary = await summarizeLink(link, context, extractLinkMeta(message, link));
-        summaries.push(summary);
+        summaries.push(await summarizeLink(link, context, extractLinkMeta(message, link)));
       } catch (err) {
         // Isolate each link: one unreadable link must not discard the summaries that
         // succeeded (issue 5a8db57). Keep the first error for the admin DM if all fail.
@@ -445,16 +487,24 @@ async function summariseLinks(message, links) {
     // Every link failed → nothing to post; fall through to the failure/cleanup path.
     if (summaries.length === 0) throw firstError;
 
-    const response = summaries.join('\n---\n');
+    // Cut each summary's questions off so they can be posted as their own messages; a summary
+    // that doesn't parse (or an abstention) is posted whole, as before (issue 576af84).
+    const parts = summaries.map((s) => ({ ...s, split: splitQuestions(s.summary) }));
+    const response = parts.map((p) => (p.split ? p.split.body : p.summary)).join('\n---\n');
 
     // If response is too long, delete pending msg and use thread splitter. Name the thread
     // after the first link's embed title (falls back to the generic title with no embed).
+    let lastPosted;
     if (response.length > DISCORD_MSG_LIMIT) {
       await pendingMsg.delete();
       const threadTitle = buildThreadTitle(extractLinkMeta(message, linksToProcess[0])?.title);
-      await sendLongResponse(message, response, threadTitle);
+      lastPosted = (await sendLongResponse(message, response, threadTitle)).at(-1);
     } else {
-      await pendingMsg.edit(response);
+      lastPosted = await pendingMsg.edit(response);
+    }
+    // Questions reply to the last summary message and resume that link's own Hermes session.
+    for (const p of parts) {
+      if (p.split) await postQuestions(lastPosted, p.split.questions, p.sessionId);
     }
 
     // Cache the last link for follow-up questions in this channel
@@ -464,7 +514,7 @@ async function summariseLinks(message, links) {
     // when Hermes couldn't read the content (hermes-cli.js). If EVERY posted summary is that
     // abstention, mark ⚠️ ("won't invent") rather than ✅; one real summary earns ✅ (issue
     // ffed210). Either way it's a terminal, non-retryable outcome, so return true.
-    const abstained = summaries.every((s) => s === messagesFR.linkUnreadable);
+    const abstained = summaries.every((s) => s.summary === messagesFR.linkUnreadable);
     await finalizeReaction(message, abstained ? '⚠️' : '✅');
     return true;
   } catch (error) {

@@ -14,6 +14,10 @@ const {
   buildAskPromptWithContextFile,
   buildLinkPrompt,
   buildSummaryFormat,
+  splitQuestions,
+  questionFrom,
+  buildQuestionReply,
+  QUESTION_PREFIX,
   buildRecapPrompt,
   extractThemes,
   parseHermesOutput,
@@ -48,12 +52,7 @@ test('buildLinkPrompt — no meta: summary format + title-free abstain clause (i
   const expected = `Résume en français le contenu de ce lien : http://x.
 Contexte : un test.
 Si tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, etc.), n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien d'autre.
-Structure ta réponse en français, en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping), ainsi :
-Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
-**Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
-**Arguments clés** (ou **Points clés** si non argumentatif) : une liste — chaque point commence par **un titre en gras**, suivi de deux ou trois phrases.
-**Questions** : trois questions ouvertes qui prolongent la réflexion.
-Sois concis.`;
+${buildSummaryFormat()}`;
   assert.equal(buildLinkPrompt('http://x', 'un test'), expected);
 });
 
@@ -332,5 +331,76 @@ test('parseHermesOutput — leaves a real answer that leads with 📖 or mention
   assert.equal(
     parseHermesOutput(stdout, '').response,
     '📖 Un livre : la lecture (reading) attentive éclaire le propos.'
+  );
+});
+
+// --- summary questions (issue 576af84) --------------------------------------
+
+test('buildSummaryFormat — points and questions are digit-first numbered lines, no # headings', () => {
+  const f = buildSummaryFormat();
+  // "1. **Titre**" starts with a digit, so unwrapText keeps it on its own line; "**1." would not.
+  assert.match(f, /^1\. \*\*Titre du point\*\* :/m);
+  assert.doesNotMatch(f, /^\*\*\d/m);
+  assert.match(f, /^\*\*Questions\*\* :\n1\. .+\?\n2\. .+\?\n3\. .+\?$/m);
+  assert.match(f, /sans titres Markdown \(#\)/);
+});
+
+const SUMMARY = `Voici un résumé de l'article « X » :
+
+**Idée principale** : Une idée.
+
+**Points clés** :
+1. **Premier** : Deux phrases.
+2. **Second** : Deux phrases.
+
+**Questions** :
+1. Pourquoi ?
+2. Comment ?
+3. Et ensuite ?`;
+
+test('splitQuestions — cuts the numbered questions off, body keeps everything before', () => {
+  const { body, questions } = splitQuestions(SUMMARY);
+  assert.deepEqual(questions, ['Pourquoi ?', 'Comment ?', 'Et ensuite ?']);
+  assert.ok(body.endsWith('2. **Second** : Deux phrases.'), 'points stay in the body');
+  assert.doesNotMatch(body, /Questions/);
+});
+
+test('splitQuestions — header glued onto the previous line by unwrapText still splits', () => {
+  const glued = '**Idée principale** : Une idée. **Questions** :\n1. Pourquoi ?\n2. Comment ?';
+  assert.deepEqual(splitQuestions(glued), {
+    body: '**Idée principale** : Une idée.',
+    questions: ['Pourquoi ?', 'Comment ?'],
+  });
+});
+
+test('splitQuestions — accepts "1)" numbering and extra blank lines', () => {
+  const s = 'Corps.\n\n**Questions** :\n\n1) Pourquoi ?\n\n2) Comment ?\n';
+  assert.deepEqual(splitQuestions(s).questions, ['Pourquoi ?', 'Comment ?']);
+});
+
+test('splitQuestions — returns null rather than drop content', () => {
+  assert.equal(splitQuestions(SUMMARY + '\nBonne lecture !'), null, 'trailing non-question line');
+  assert.equal(splitQuestions('Corps.\n**Questions** :\n1. Seule ?'), null, 'fewer than 2');
+  assert.equal(
+    splitQuestions('Corps.\n**Questions** : Pourquoi ? Comment ?'),
+    null,
+    'not numbered'
+  );
+  assert.equal(splitQuestions('**Questions** :\n1. A ?\n2. B ?'), null, 'empty body');
+  assert.equal(splitQuestions('Pas de section.'), null, 'no header');
+  assert.equal(splitQuestions(''), null);
+  assert.equal(splitQuestions(null), null);
+});
+
+test('questionFrom — recognises only question messages', () => {
+  assert.equal(questionFrom(`${QUESTION_PREFIX}Pourquoi ?`), 'Pourquoi ?');
+  assert.equal(questionFrom('Voici un résumé…'), null);
+  assert.equal(questionFrom(undefined), null);
+});
+
+test('buildQuestionReply — quotes the question before the member reply', () => {
+  assert.equal(
+    buildQuestionReply('Pourquoi ?', 'Parce que.'),
+    'En réponse à ta question « Pourquoi ? » : Parce que.'
   );
 });
