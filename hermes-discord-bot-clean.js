@@ -221,7 +221,8 @@ client.on('messageCreate', async (message) => {
   // back in explicitly (issue 92b16a6).
   const isReplyToBot = isReplyTo(message, client.user.id);
   const isMentioned = mentionsUser(message.content, client.user.id) || isReplyToBot;
-  const isDirectMessage = message.channel.type === 'DM';
+  // v14 channel types are numeric; the v13 string 'DM' never matched (issue 1631596).
+  const isDirectMessage = message.channel.isDMBased();
 
   // --- Server restriction ---
   // Only respond on the allowed guild, or in DMs (for admin)
@@ -424,7 +425,7 @@ client.on('messageCreate', async (message) => {
       console.error('Error:', error);
 
       // Build rich notification for admin
-      const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
+      const channelName = message.channel.isDMBased() ? 'DM' : `#${message.channel.name}`;
       const guildName = message.guild ? message.guild.name : 'DM';
       const details = [
         `Question: ${content}`,
@@ -533,7 +534,7 @@ async function summariseLinks(message, links) {
     await finalizeReaction(message, '❌');
 
     // Build rich notification for admin
-    const channelName = message.channel.type === 'DM' ? 'DM' : `#${message.channel.name}`;
+    const channelName = message.channel.isDMBased() ? 'DM' : `#${message.channel.name}`;
     const guildName = message.guild ? message.guild.name : 'DM';
     const details = [
       `URL: ${links[0]}`,

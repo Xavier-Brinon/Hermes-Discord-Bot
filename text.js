@@ -222,10 +222,12 @@ async function sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITL
 
   const chunks = splitAtBoundaries(text, DISCORD_MSG_LIMIT);
 
-  // If already in a thread, post chunks directly — no sub-thread; otherwise create one.
-  const target = message.channel.isThread()
-    ? message.channel
-    : await message.startThread({ name: threadTitle, autoArchiveDuration: 60 });
+  // In a thread or a DM (no threads there, issue 1631596), post chunks directly; otherwise
+  // create a thread.
+  const target =
+    message.channel.isThread() || message.channel.isDMBased()
+      ? message.channel
+      : await message.startThread({ name: threadTitle, autoArchiveDuration: 60 });
 
   // Collect every posted message so the caller can key the session on them (issue 244bad7).
   const posted = [];

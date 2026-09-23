@@ -289,8 +289,8 @@ test('buildThreadTitle — never splits a surrogate-pair emoji when truncating',
 // Resolves to the posted Message(s) so the bot can key the session on them (issue 244bad7).
 
 // A duck-typed channel that records sends and returns a fake Message placed in it.
-function fakeChannel(isThread) {
-  const channel = { isThread: () => isThread, sent: [] };
+function fakeChannel(isThread, isDM = false) {
+  const channel = { isThread: () => isThread, isDMBased: () => isDM, sent: [] };
   channel.send = async (text) => {
     const msg = { id: `m${channel.sent.length}`, channel, text };
     channel.sent.push(msg);
@@ -321,4 +321,15 @@ test('sendLongResponse — long text in a channel: returns the chunks of the new
     posted.every((m) => m.channel === thread),
     'all chunks landed in the new thread'
   );
+});
+
+test('sendLongResponse — long text in a DM: chunks posted in the DM, no thread (issue 1631596)', async () => {
+  const channel = fakeChannel(false, true);
+  const message = {
+    channel,
+    startThread: async () => assert.fail('a DM channel cannot have threads'),
+  };
+  const posted = await sendLongResponse(message, 'Phrase. '.repeat(600));
+  assert.ok(posted.length > 1);
+  assert.deepEqual(posted, channel.sent);
 });
