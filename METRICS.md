@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-23T14:00:28Z
-source_count: 33
+timestamp: 2026-09-23T14:00:31Z
+source_count: 34
 ---
 
 # Metrics — @YackShavingSkill
@@ -27,6 +27,7 @@ they do not represent current drift. Canonical definition:
 | embed-anchor-summary | STANDARD | PASS | 100% |
 | gateway-autostart | STANDARD | PASS | 100% |
 | global-error-handlers | STANDARD | PASS | 100% |
+| help-reply-to-continue | TRIVIAL | PASS | 100% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
 | max-turns-cap | STANDARD | PASS | 100% |
 | mention-gate | STANDARD | PASS | 100% |
@@ -57,7 +58,7 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 33 |
+| Total tasks | 34 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 98.4% |
 
@@ -103,4 +104,5 @@ they do not represent current drift. Canonical definition:
 | 2026-09-22T19:03:49Z | summary-questions | 100% |
 | 2026-09-23T06:40:45Z | gateway-autostart | 100% |
 | 2026-09-23T08:03:52Z | dm-channel-type | 100% |
+| 2026-09-23T14:00:16Z | help-reply-to-continue | 100% |
 | 2026-09-23T14:00:16Z | readme-token-check | 100% |

@@ -97,7 +97,8 @@ const messagesFR = {
     'Voici ce que je peux faire pour vous :\n' +
     '• Répondre à vos questions en français\n' +
     '• Vous aider avec des tâches variées\n' +
-    '• Fournir des informations et des conseils\n\n' +
+    '• Fournir des informations et des conseils\n' +
+    "• Poursuivre une conversation : répondez (↩) à l'un de mes messages\n\n" +
     "**Exemples d'utilisation :**\n" +
     '• @{botName} Quel temps fait-il à Paris ?\n' +
     "• @{botName} Peux-tu me donner la définition de 'algorithmique' ?\n" +
