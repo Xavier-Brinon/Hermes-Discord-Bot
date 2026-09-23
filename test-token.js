@@ -1,11 +1,23 @@
 // test-token.js
-// Script to test if a Discord token is valid
+// Script to test if a Discord token is valid, without printing it.
+// Run: npx dotenvx run -f .env -- node test-token.js
+// Reads DISCORD_BOT_TOKEN from the environment; a token passed as an argument would land in
+// shell history and `ps`.
 
 const { Client } = require('discord.js');
-const token = process.argv[2];
+const token = process.env.DISCORD_BOT_TOKEN;
 
 if (!token) {
-  console.error('Please provide a token as an argument');
+  console.error('DISCORD_BOT_TOKEN not found in environment. Did you launch with npx dotenvx run?');
+  process.exit(1);
+}
+
+// dotenvx injects the still-encrypted value when it has no private key, which Discord would
+// report as a misleading "invalid token".
+if (token.startsWith('encrypted:')) {
+  console.error(
+    '❌ DISCORD_BOT_TOKEN is still encrypted: .env.keys (or DOTENV_PRIVATE_KEY) is missing'
+  );
   process.exit(1);
 }
 

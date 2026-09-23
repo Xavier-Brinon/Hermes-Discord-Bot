@@ -155,12 +155,12 @@ start/restart.
 
 ## Troubleshooting
 
-| Problem                            | Check                                                  |
-| ---------------------------------- | ------------------------------------------------------ |
-| Bot does not respond               | `./manage_hermes.sh status`                            |
-| Token error                        | `npx dotenvx get DISCORD_BOT_TOKEN`                    |
-| Bot down after a container restart | `tail .autostart.log`, then `./manage_hermes.sh start` |
-| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start`             |
+| Problem                            | Check                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| Bot does not respond               | `./manage_hermes.sh status`                                              |
+| Token error                        | `npx dotenvx run -f .env -- node test-token.js` (never prints the token) |
+| Bot down after a container restart | `tail .autostart.log`, then `./manage_hermes.sh start`                   |
+| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start`                               |
 
 ## Maintenance
 
