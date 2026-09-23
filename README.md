@@ -97,9 +97,23 @@ git reset --hard <sha>        # go back to the stable commit
 ## After a reboot
 
 The bot runs in a **managed Docker sandbox**. A container restart or recreate
-kills every process — PM2 included — and re-runs the platform entrypoint, which
-does **not** start the bot. The sandbox exposes no boot hook we control, so
-recovery is one manual command:
+kills every process — PM2 included — and re-runs the platform entrypoint
+(`tini -- /app/u4s-hermes-agent`), which starts a Hermes gateway
+(`hermes gateway run`, with `HERMES_HOME=/data`) but not the bot.
+
+The bot rides on that gateway: a **gateway hook** in `/data/hooks/` runs
+`./manage_hermes.sh start` on the gateway's `gateway:startup` event (issue
+1ce88f5). Install it once — it lives on the persistent `/data` volume and points
+at the repo copy, so `git pull` keeps it current:
+
+```bash
+cd /data/workspace
+./manage_hermes.sh install-hook
+```
+
+Each automatic start is logged to `/data/workspace/.autostart.log`. If the bot is
+still down after a restart, start it by hand — `start` is idempotent, so it is
+always safe to run:
 
 ```bash
 cd /data/workspace
@@ -109,14 +123,18 @@ cd /data/workspace
 Everything the bot needs (code, `node_modules`, `.env`, `.env.keys`) lives on the
 persistent `/data` volume, so `start` works immediately on a fresh container.
 
+> **Two Hermes homes.** The platform gateway uses `HERMES_HOME=/data`; your shell
+> (and the bot's own `hermes` calls) use `~/.hermes` = `/data/.hermes`. Gateway
+> hooks therefore go in `/data/hooks`, not `/data/.hermes/hooks`. The hook strips
+> every `HERMES_*` variable before starting the bot so it never inherits the
+> gateway's home.
+
 ## Automatic recovery
 
 - **Bot crash, container alive:** PM2 restarts the process automatically — no
   action needed. This is the common case.
-- **Container restart or recreate:** not automatic — run `./manage_hermes.sh start`
-  (above). Full hands-off recovery isn't reachable inside a managed sandbox: any
-  in-container supervisor would itself need something to start it at boot, and
-  only the platform can do that.
+- **Container restart or recreate:** automatic via the gateway hook (above), once
+  `install-hook` has been run.
 
 There is deliberately **no bash watchdog**. The former `hermes_watchdog.sh`
 duplicated PM2's own crash-restart, ran unsupervised (nothing restarted it if it
@@ -133,12 +151,12 @@ start/restart.
 
 ## Troubleshooting
 
-| Problem                            | Check                                      |
-| ---------------------------------- | ------------------------------------------ |
-| Bot does not respond               | `./manage_hermes.sh status`                |
-| Token error                        | `npx dotenvx get DISCORD_BOT_TOKEN`        |
-| Bot down after a container restart | `./manage_hermes.sh start`                 |
-| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start` |
+| Problem                            | Check                                                  |
+| ---------------------------------- | ------------------------------------------------------ |
+| Bot does not respond               | `./manage_hermes.sh status`                            |
+| Token error                        | `npx dotenvx get DISCORD_BOT_TOKEN`                    |
+| Bot down after a container restart | `tail .autostart.log`, then `./manage_hermes.sh start` |
+| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start`             |
 
 ## Maintenance
 

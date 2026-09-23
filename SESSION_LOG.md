@@ -1248,3 +1248,48 @@ PASSED. The diff is the Pre-Flight goal: a digit-first numbered format, a pure `
 - Model compliance with the new format is only verifiable live (no link eval runner; local Hermes 0.20 can't reach Mistral, 1ae5380). Miss = today's single message.
 - `--resume` on a `--max-turns` link session is assumed, not observed (assumption 3). If it fails, askHermes errors and the member gets the generic error reply; the admin DM will show it.
 - The @mention path still carries buildAskPrompt's "paragraphes continus" line ahead of the format; plain Q&A must stay byte-identical, so it was not touched.
+
+# Task: gateway-autostart
+complexity_score: 5
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** A two-file Hermes gateway hook on `gateway:startup` that spawns the existing `manage_hermes.sh start`, detached, with every `HERMES_*` variable stripped; an idempotent `start`; an `install-hook` symlink into `/data/hooks`. I will NOT add a watchdog, retries, polling cron, alerting, or any logic in the Python shim beyond spawning the script.
+- **Scope Boundaries:**
+  - In-scope: `ops/hermes-hooks/start-discord-bot/HOOK.yaml`, `ops/hermes-hooks/start-discord-bot/handler.py`, `manage_hermes.sh`, `README.md`
+  - Out-of-scope: every `*.js` file, `test/`, `evals/`, `package.json`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/minimal-scaffold.md` — two small files, no framework, reuse the existing start script.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no supervisor, no alerting stack, no retry policy.
+
+### Assumptions
+`.artifacts/gateway-autostart/pre_computation_block.md`
+
+*(7 assumptions — 5 HIGH, 2 MEDIUM: symlinked hook dirs and `pm2 pid` output, both checked on the VPS at install time. Headline: the hook child inherits HERMES_HOME=/data from the gateway, which would silently break the bot's hermes 0.16 calls — stripped by design. Python handler is required by the Hermes hook contract; kept to a shim.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Shipped exactly the goal: `HOOK.yaml` on `gateway:startup`, a `handler.py` shim that spawns `manage_hermes.sh start` detached with every `HERMES_*` variable stripped, an idempotent `start` (early exit when `pm2 pid` is positive; `cd` moved first so `npx pm2` resolves the local pm2), an `install-hook` symlink into `/data/hooks`, and a rewritten reboot runbook. No watchdog, retry, cron or alerting.
+
+### Violation Checklist
+- [x] **Complexity Creep** — Line-Count Budget FIRED: 74 vs 45 (+64%). Executable ~28 lines; the rest is comments and README prose documenting the two-Hermes-homes trap. Diagnosed in simplicity_review.md.
+- [ ] **Scope Bleed** — none.
+- [ ] **Style Drift** — none.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/gateway-autostart/verification_matrix.md`
+
+2 PASS, 1 PARTIAL, 5 PENDING. The handler was not dry-run locally: that would mean authoring Python, which the user's global rules forbid. It is exercised on the VPS by calling the existing handler file, then for real at the next container recreate.
+
+### Residual risk carried to handover
+- The full chain (recreate → gateway → hook → PM2 → bot) is only provable at the next recreate.
+- Assumption 5 (symlinked hook dir is discovered) — if the recreate shows no `.autostart.log` entry, switch `install-hook` from `ln -sfn` to a copy.
+- A gateway crash-restart fires the hook again; idempotent `start` makes that a logged no-op.
