@@ -38,7 +38,7 @@ case "$1" in
         ;;
     install-hook)
         # Link the repo's gateway hook into the platform gateway's hooks dir (HERMES_HOME=/data,
-        # so /data/hooks — NOT /data/.hermes/hooks, which is the interactive CLI's home). The
+        # so /data/hooks — NOT /data/.hermes/hooks, the interactive shell's CLI home). The
         # gateway loads hooks when it starts, so this takes effect at the next container start.
         mkdir -p /data/hooks
         ln -sfn /data/workspace/ops/hermes-hooks/start-discord-bot /data/hooks/start-discord-bot

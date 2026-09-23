@@ -2,10 +2,10 @@
 # all the logic stays in manage_hermes.sh. Fire-and-forget: start_new_session detaches the
 # script so a slow `npx dotenvx` never delays the gateway, and PM2 daemonises itself anyway.
 #
-# Every HERMES_* variable is dropped. The gateway runs with HERMES_HOME=/data, while the bot's
-# own hermes CLI lives under /data/.hermes; PM2 would capture the inherited value and the bot's
-# every Hermes call would run against the wrong home. It also keeps the platform's web-UI
-# password out of the bot's environment. Issue 1ce88f5.
+# Every inherited HERMES_* variable is dropped. The bot gets its own HERMES_HOME from its encrypted
+# .env via dotenvx, which does NOT override variables already set — so without this the
+# gateway's value would win instead of .env's (both are /data today, but .env must decide), and
+# PM2 would capture the platform's HERMES_WEBUI_PASSWORD into the bot's environment. 1ce88f5.
 import os
 import subprocess
 

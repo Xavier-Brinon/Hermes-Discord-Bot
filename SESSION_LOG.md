@@ -1293,3 +1293,6 @@ PASSED. Shipped exactly the goal: `HOOK.yaml` on `gateway:startup`, a `handler.p
 - The full chain (recreate → gateway → hook → PM2 → bot) is only provable at the next recreate.
 - Assumption 5 (symlinked hook dir is discovered) — if the recreate shows no `.autostart.log` entry, switch `install-hook` from `ln -sfn` to a copy.
 - A gateway crash-restart fires the hook again; idempotent `start` makes that a logged no-op.
+
+## Post-Flight Correction (gateway-autostart, after VPS test)
+Assumption 4 was wrong in its reasoning, not in its conclusion. The bot does NOT use `/data/.hermes`: its encrypted `.env` sets `HERMES_HOME` (injected by dotenvx), and its profile lives at `/data/profiles/discord-bot` — verified on the VPS. Only the interactive shell (no `HERMES_HOME`) uses `/data/.hermes`. Stripping `HERMES_*` in the handler is still correct: dotenvx does not override variables already set, so the strip lets `.env` decide, and it keeps `HERMES_WEBUI_PASSWORD` out of the bot. The VPS test's `grep -c '^HERMES_HOME='` = 1 is therefore expected (it comes from `.env`); the meaningful check is that `HERMES_WEBUI_PASSWORD` is absent after a clean (`pm2 delete`) hook start. Comments in handler.py, manage_hermes.sh and the README note corrected.

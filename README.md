@@ -123,11 +123,15 @@ cd /data/workspace
 Everything the bot needs (code, `node_modules`, `.env`, `.env.keys`) lives on the
 persistent `/data` volume, so `start` works immediately on a fresh container.
 
-> **Two Hermes homes.** The platform gateway uses `HERMES_HOME=/data`; your shell
-> (and the bot's own `hermes` calls) use `~/.hermes` = `/data/.hermes`. Gateway
-> hooks therefore go in `/data/hooks`, not `/data/.hermes/hooks`. The hook strips
-> every `HERMES_*` variable before starting the bot so it never inherits the
-> gateway's home.
+> **Two Hermes homes.** The platform gateway and the bot both use
+> `HERMES_HOME=/data` — the gateway from the platform's environment, the bot from
+> its own encrypted `.env` (profile at `/data/profiles/discord-bot`). Your
+> interactive shell sets no `HERMES_HOME`, so the `hermes` CLI there uses
+> `~/.hermes` = `/data/.hermes`. Gateway hooks therefore go in `/data/hooks`, not
+> `/data/.hermes/hooks`; to inspect the gateway's config from the shell, prefix
+> `HERMES_HOME=/data`. The hook strips every inherited `HERMES_*` variable before
+> starting the bot: dotenvx does not override variables that are already set, so
+> this lets `.env` decide, and keeps the platform's web-UI password out of the bot.
 
 ## Automatic recovery
 
