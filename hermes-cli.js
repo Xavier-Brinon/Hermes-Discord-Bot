@@ -238,4 +238,45 @@ function runLinkSummary(url, context, meta, transcript) {
   });
 }
 
-module.exports = { askHermes, summarizeLink };
+// Startup probe (issue 9afaeac): which Hermes will the bot actually run, and which version?
+// The VPS has two installs, so the configured name alone doesn't answer that. A bare name is
+// looked up on PATH like execFile does; symlinks are followed. Never rejects — resolves
+// { path, version, error }, with path null when nothing executable is found, and version
+// null when `--version` fails (the binary may still answer questions).
+function probeHermes(bin = HERMES_BIN) {
+  const fs = require('fs');
+  const candidates = bin.includes('/')
+    ? [bin]
+    : (process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, bin));
+  const found = candidates.find((c) => {
+    try {
+      fs.accessSync(c, fs.constants.X_OK);
+      return fs.statSync(c).isFile();
+    } catch {
+      return false;
+    }
+  });
+  if (!found) {
+    return Promise.resolve({
+      path: null,
+      version: null,
+      error: `${bin} not found or not executable`,
+    });
+  }
+  const resolved = fs.realpathSync(found);
+  return new Promise((resolve) => {
+    execFile(resolved, ['--version'], { timeout: 15000 }, (error, stdout, stderr) => {
+      const firstLine = (stdout || '').split('\n').find((l) => l.trim());
+      if (error || !firstLine) {
+        return resolve({
+          path: resolved,
+          version: null,
+          error: (stderr || error?.message || 'no output').trim(),
+        });
+      }
+      resolve({ path: resolved, version: firstLine.trim(), error: null });
+    });
+  });
+}
+
+module.exports = { askHermes, summarizeLink, probeHermes };

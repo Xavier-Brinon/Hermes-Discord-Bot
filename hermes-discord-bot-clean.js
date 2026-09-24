@@ -9,6 +9,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const {
   HERMES_BIN,
+  HERMES_PROFILE,
   ALLOWED_GUILD_ID,
   ADMIN_USER_ID,
   messagesFR,
@@ -41,7 +42,7 @@ const {
 } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
-const { askHermes, summarizeLink } = require('./hermes-cli');
+const { askHermes, summarizeLink, probeHermes } = require('./hermes-cli');
 
 // Bound the dedup set so a long-lived process can't leak memory. Discord only fires
 // duplicate messageCreate events back-to-back, so a rolling window of recent ids is
@@ -186,7 +187,18 @@ client.on('clientReady', () => {
   console.log(`✅ Bot Discord Hermes connecté en tant que ${client.user.tag}!`);
   console.log(`📢 Prêt à répondre aux mentions @${client.user.username}`);
   console.log(`🇫🇷 Réponses exclusivement en français`);
-  console.log(`🔌 Connecté à Hermes CLI: ${HERMES_BIN}`);
+  // Log which Hermes binary will actually run, and its version (issue 9afaeac). A missing
+  // binary is reported once here — and to the admin — instead of once per user message.
+  probeHermes().then(({ path: binPath, version, error }) => {
+    if (!binPath) {
+      console.error(`❌ Hermes CLI introuvable: ${HERMES_BIN} (${error})`);
+      notifyAdmin('Binaire introuvable au démarrage', `HERMES_BIN=${HERMES_BIN}\n${error}`);
+      return;
+    }
+    console.log(
+      `🔌 Hermes CLI: ${binPath} — ${version || `version illisible (${error})`} — profil ${HERMES_PROFILE}`
+    );
+  });
 
   // Log all guilds the bot is in (for server restriction setup)
   console.log(`🏠 Serveurs connectés (${client.guilds.cache.size}):`);

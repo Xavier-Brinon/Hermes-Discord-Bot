@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-25T08:51:42Z
-source_count: 39
+timestamp: 2026-09-25T10:36:10Z
+source_count: 40
 ---
 
 # Metrics — @YackShavingSkill
@@ -31,6 +31,7 @@ they do not represent current drift. Canonical definition:
 | help-reply-to-continue | TRIVIAL | PASS | 100% |
 | hermes-profile | STANDARD | PASS | 39% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
+| log-hermes-bin | TRIVIAL | PASS | 100% |
 | max-turns-cap | STANDARD | PASS | 100% |
 | mention-gate | STANDARD | PASS | 100% |
 | modularise-entrypoint | COMPLEX | PASS | 100% |
@@ -63,9 +64,9 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 39 |
+| Total tasks | 40 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 95.7% |
+| Mean Scope Adherence | 95.8% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -111,6 +112,7 @@ they do not represent current drift. Canonical definition:
 | 2026-09-23T08:03:52Z | dm-channel-type | 100% |
 | 2026-09-23T14:00:16Z | help-reply-to-continue | 100% |
 | 2026-09-23T14:00:16Z | readme-token-check | 100% |
+| 2026-09-24T17:22:41Z | log-hermes-bin | 100% |
 | 2026-09-25T06:36:44Z | summary-always-thread | 47% |
 | 2026-09-25T07:32:34Z | hermes-profile | 39% |
 | 2026-09-25T08:02:29Z | summary-title-fallback | 100% |
