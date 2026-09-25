@@ -301,33 +301,8 @@ test('parseHermesOutput — leaves a non-leading parenthetical untouched', () =>
   );
 });
 
-// tool-progress leak: Hermes fetch/read trace lines leaking past -Q (issue c0003a51).
-// Fixture mirrors the capture pasted on the issue (📄 fetch → 📖 read range → answer).
-
-test('parseHermesOutput — strips leading 📄/📖 Reading trace lines (real capture, issue c0003a51)', () => {
-  const stdout =
-    '📄 Reading https://youtu.be/_ztNd8Rpc2w?si=34XZfWc9kQ_abcde\n' +
-    '📖 Reading youtu.be-ba51d7734e.md L250-449\n' +
-    'Voici un résumé du documentaire « Exemple » : il défend une thèse.';
-  assert.equal(
-    parseHermesOutput(stdout, '').response,
-    'Voici un résumé du documentaire « Exemple » : il défend une thèse.'
-  );
-});
-
-test('parseHermesOutput — strips an interleaved 📖 Reading trace line (line-wise, not leading-only)', () => {
-  const stdout =
-    'Voici un résumé du documentaire.\n' +
-    '📖 Reading youtu.be-ba51d7734e.md L450-600\n' +
-    'Il aborde plusieurs thèmes.';
-  assert.equal(
-    parseHermesOutput(stdout, '').response,
-    'Voici un résumé du documentaire.\nIl aborde plusieurs thèmes.'
-  );
-});
-
 test('parseHermesOutput — leaves a real answer that leads with 📖 or mentions "reading" untouched', () => {
-  // Same emoji as a trace line but NOT the "<emoji> Reading " shape → preserved.
+  // The 0.16 "📖 Reading …" trace filter is gone (issue 346c1cf); an emoji-led answer is kept.
   const stdout = '📖 Un livre : la lecture (reading) attentive éclaire le propos.';
   assert.equal(
     parseHermesOutput(stdout, '').response,

@@ -214,16 +214,9 @@ function extractThemes(rawResponse) {
 const MAX_ITERATIONS_NOTICE = /^\s*(?:⚠️?\s*)?Reached maximum iterations\b/mu;
 
 function parseHermesOutput(stdout, stderr) {
-  // Drop Hermes tool-progress narration that leaks past -Q: the fetch/read trace
-  // lines `📄 Reading <url>` and `📖 Reading <file> L<range>`. Filtered line-wise
-  // (not leading-only) so a trace line survives even if a second fetch interleaves
-  // after the answer starts. The emoji + English "Reading " prefix is specific
-  // enough that a real French answer — even one mentioning "reading" or opening
-  // with an emoji — is untouched. See issue c0003a51.
-  const READING_TRACE = /^\s*(?:📄|📖) Reading /u;
   const lines = String(stdout || '')
     .split('\n')
-    .filter((line) => !READING_TRACE.test(line) && !MAX_ITERATIONS_NOTICE.test(line));
+    .filter((line) => !MAX_ITERATIONS_NOTICE.test(line));
   let i = 0;
   // Skip leading blanks and leaked CLI diagnostics: a bare `⚠` (U+26A0) NOT
   // followed by the emoji variation selector — so a real `⚠️` answer survives.

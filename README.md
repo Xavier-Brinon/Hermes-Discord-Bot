@@ -181,6 +181,12 @@ Clearing `.session_cache.json` means a reply to an answer from before the switch
 starts a fresh conversation, not an error. Test a profile before switching with
 `npx dotenvx run -f .env -- <bin> -p <profile> chat -q "Dis bonjour." -Q --source tool`.
 
+> **Rolling back to 0.16 now takes two more steps.** The parser no longer strips
+> 0.16's `📄 Reading …` trace lines (issue 346c1cf), so revert that commit first,
+> or those lines end up at the top of 📝 summaries. The `discord-bot` profile's
+> `SOUL.md` also still has the "📌 Résumé / ❓ Questions" rule that was removed
+> from the 0.21 profile (issue 8f33078); delete that line too.
+
 ## Security
 
 - The Discord token is **encrypted** in `.env` via dotenvx
