@@ -194,11 +194,58 @@ starts a fresh conversation, not an error. Test a profile before switching with
 - **Never** commit `.env.keys` or expose the token in cleartext
 - To add/change an encrypted variable: `npx dotenvx set NAME "value"`
 
+## Health check
+
+**Online is not the same as answering.** The bot shows as online in Discord as soon as it
+logs in, and Hermes plays no part in that. If every Hermes call fails, the bot stays green
+and replies with its French error message. Only an **@mention in Discord** proves the whole
+chain works.
+
+From the VPS, in order of cost:
+
+1. **Which Hermes the bot runs.** The bot logs it at every start (issue 9afaeac):
+
+   ```bash
+   npx pm2 logs hermes-discord-bot --lines 50 --nostream | grep '🔌'
+   # 🔌 Hermes CLI: /opt/venv/bin/hermes — Hermes Agent v0.21.4 … — profil discord-bot-021
+   ```
+
+   The line appears a second or two after a restart. `❌ Hermes CLI introuvable` means the
+   binary is missing; the admin also gets a DM.
+
+2. **Ask Hermes exactly as the bot does.** `HERMES_BIN` and `HERMES_PROFILE` live in the
+   encrypted `.env`, so read them from there instead of typing them:
+
+   ```bash
+   cd /data/workspace
+   npx dotenvx run -f .env -- sh -c '"$HERMES_BIN" -p "$HERMES_PROFILE" chat -q "Dis bonjour." -Q --source tool'
+   ```
+
+   A French greeting means the model, the key and the profile all work. For a full diagnosis,
+   replace `chat -q … --source tool` with `doctor`. Don't follow doctor's `--fix` or
+   `hermes setup` advice on the live profile: it rewrites the profile's config.
+
+3. **@mention the bot in Discord.** This is the definitive check.
+
+**Why not just run `hermes` in the shell.** The bot's configuration comes from five things:
+`HERMES_BIN`, `HERMES_HOME`, the profile, the environment dotenvx injects, and the working
+directory. A bare `hermes` in an interactive shell gets at most three of them right. It
+resolves to the platform install (`/opt/venv/bin/hermes`) whatever the bot uses, it uses
+`/data/.hermes` rather than the bot's home, and it sees none of the bot's keys. On
+2026-08-13 a bare `hermes doctor` reported every key missing for that reason alone. There
+are two installs on the VPS: the platform's `/opt/venv/bin/hermes` and the older pip one
+at `/data/.local/bin/hermes`. To confirm which one the running process uses, beyond the 🔌
+line:
+
+```bash
+npx pm2 env 0 | grep -E 'HERMES_(BIN|PROFILE)'   # keep the grep: pm2 env prints every secret
+```
+
 ## Troubleshooting
 
 | Problem                            | Check                                                                    |
 | ---------------------------------- | ------------------------------------------------------------------------ |
-| Bot does not respond               | `./manage_hermes.sh status`                                              |
+| Bot does not respond               | `./manage_hermes.sh status`, then §Health check                          |
 | Token error                        | `npx dotenvx run -f .env -- node test-token.js` (never prints the token) |
 | Bot down after a container restart | `tail .autostart.log`, then `./manage_hermes.sh start`                   |
 | PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start`                               |
