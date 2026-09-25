@@ -33,6 +33,7 @@ test('text — exports the text/url helpers including the moved formatHermesResp
     'extractLinks',
     'formatHermesResponse',
     'sendLongResponse',
+    'postInThread',
   ]) {
     assert.equal(typeof t[fn], 'function', `text.${fn} not a function`);
   }

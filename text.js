@@ -219,15 +219,23 @@ async function sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITL
     // Fits in one message — simple reply
     return [await message.reply(text)];
   }
+  return postInThread(message, text, threadTitle);
+}
 
-  const chunks = splitAtBoundaries(text, DISCORD_MSG_LIMIT);
+// Post text in `message`'s thread, whatever its length: in a thread or a DM (no threads
+// there, issue 1631596) post directly; else reuse the thread already on the message (a
+// second startThread throws) or start one. Text that fits stays ONE message — the splitter
+// cuts at every blank line. Resolves to the posted Message(s) (issue f16ff0f, ADR 0001).
+async function postInThread(message, text, threadTitle = DEFAULT_THREAD_TITLE) {
+  const chunks =
+    text.length <= DISCORD_MSG_LIMIT ? [text] : splitAtBoundaries(text, DISCORD_MSG_LIMIT);
 
-  // In a thread or a DM (no threads there, issue 1631596), post chunks directly; otherwise
-  // create a thread.
-  const target =
-    message.channel.isThread() || message.channel.isDMBased()
-      ? message.channel
+  let target = message.channel;
+  if (!target.isThread() && !target.isDMBased()) {
+    target = message.hasThread
+      ? (message.thread ?? (await message.channel.threads.fetch(message.id)))
       : await message.startThread({ name: threadTitle, autoArchiveDuration: 60 });
+  }
 
   // Collect every posted message so the caller can key the session on them (issue 244bad7).
   const posted = [];
@@ -248,4 +256,5 @@ module.exports = {
   safeReply,
   buildThreadTitle,
   sendLongResponse,
+  postInThread,
 };

@@ -15,6 +15,7 @@ const {
   safeReply,
   buildThreadTitle,
   sendLongResponse,
+  postInThread,
 } = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
@@ -332,4 +333,74 @@ test('sendLongResponse — long text in a DM: chunks posted in the DM, no thread
   const posted = await sendLongResponse(message, 'Phrase. '.repeat(600));
   assert.ok(posted.length > 1);
   assert.deepEqual(posted, channel.sent);
+});
+
+// --- postInThread ---------------------------------------------------------
+// A 📝 summary always goes in a thread, whatever its length (issue f16ff0f, ADR 0001).
+
+const SHORT_SUMMARY = 'Intro.\n\n**Idée principale** : x.\n\n**Points clés** :\n1. **A** : y.';
+
+test('postInThread — short text in a channel: ONE message in a new thread, named as asked', async () => {
+  const thread = fakeChannel(true);
+  let options;
+  const message = {
+    channel: fakeChannel(false),
+    hasThread: false,
+    startThread: async (o) => ((options = o), thread),
+  };
+  const posted = await postInThread(message, SHORT_SUMMARY, '📄 Titre');
+  assert.equal(posted.length, 1, 'blank lines must not split a text that fits');
+  assert.equal(posted[0].text, SHORT_SUMMARY);
+  assert.equal(posted[0].channel, thread);
+  assert.equal(options.name, '📄 Titre');
+});
+
+test('postInThread — long text in a channel: every chunk in the new thread', async () => {
+  const thread = fakeChannel(true);
+  const message = {
+    channel: fakeChannel(false),
+    hasThread: false,
+    startThread: async () => thread,
+  };
+  const posted = await postInThread(message, 'Phrase. '.repeat(600));
+  assert.ok(posted.length > 1);
+  assert.deepEqual(posted, thread.sent);
+});
+
+test('postInThread — message already has a cached thread: reuses it, never startThread', async () => {
+  const thread = fakeChannel(true);
+  const message = {
+    channel: fakeChannel(false),
+    hasThread: true,
+    thread,
+    startThread: async () => assert.fail('a second startThread throws MessageExistingThread'),
+  };
+  const posted = await postInThread(message, SHORT_SUMMARY);
+  assert.deepEqual(posted, thread.sent);
+});
+
+test('postInThread — message has an uncached thread: fetched by the message id', async () => {
+  const thread = fakeChannel(true);
+  const channel = fakeChannel(false);
+  channel.threads = {
+    fetch: async (id) => (id === 'msg1' ? thread : assert.fail(`fetched ${id}`)),
+  };
+  const message = {
+    id: 'msg1',
+    channel,
+    hasThread: true,
+    thread: null,
+    startThread: async () => assert.fail('must not start a second thread'),
+  };
+  const posted = await postInThread(message, SHORT_SUMMARY);
+  assert.deepEqual(posted, thread.sent);
+});
+
+test('postInThread — in a thread or a DM: posts there, no new thread', async () => {
+  for (const channel of [fakeChannel(true), fakeChannel(false, true)]) {
+    const message = { channel, startThread: async () => assert.fail('no nested / DM thread') };
+    const posted = await postInThread(message, SHORT_SUMMARY);
+    assert.deepEqual(posted, channel.sent);
+    assert.equal(posted.length, 1);
+  }
 });

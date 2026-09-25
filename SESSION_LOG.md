@@ -1296,3 +1296,47 @@ PASSED. Shipped exactly the goal: `HOOK.yaml` on `gateway:startup`, a `handler.p
 
 ## Post-Flight Correction (gateway-autostart, after VPS test)
 Assumption 4 was wrong in its reasoning, not in its conclusion. The bot does NOT use `/data/.hermes`: its encrypted `.env` sets `HERMES_HOME` (injected by dotenvx), and its profile lives at `/data/profiles/discord-bot` — verified on the VPS. Only the interactive shell (no `HERMES_HOME`) uses `/data/.hermes`. Stripping `HERMES_*` in the handler is still correct: dotenvx does not override variables already set, so the strip lets `.env` decide, and it keeps `HERMES_WEBUI_PASSWORD` out of the bot. The VPS test's `grep -c '^HERMES_HOME='` = 1 is therefore expected (it comes from `.env`); the meaningful check is that `HERMES_WEBUI_PASSWORD` is absent after a clean (`pm2 delete`) hook start. Comments in handler.py, manage_hermes.sh and the README note corrected.
+
+# Task: summary-always-thread
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One `postInThread` helper in `text.js` (thread/DM → post there; existing message thread → post there; else start one; a text that fits is ONE message), reused by `sendLongResponse`; `summariseLinks` edits in place only in a thread/DM and otherwise always threads; the thread also gets the cached link. ADR 0001 records the decision. I will NOT touch the @mention Q&A path, the splitter's per-paragraph chunking, or move the placeholder into the thread.
+- **Scope Boundaries:**
+  - In-scope: `text.js`, `hermes-discord-bot-clean.js`, `test/text.test.js`, `test/modules.test.js`, `docs/adr/0001-link-summaries-always-in-a-thread.md`, `CONTEXT.md`
+  - Out-of-scope: `cache.js`, `prompts.js`, `hermes-cli.js`, `recap.js`, `config.js`, `evals/`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — extract the thread-target logic sendLongResponse already has into one helper; the summary flow calls it instead of growing its own.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no per-guild "thread mode" setting, no thread-archive tuning, no placeholder-in-thread choreography.
+
+### Assumptions
+`.artifacts/summary-always-thread/pre_computation_block.md`
+
+*(4 assumptions, all HIGH — discord.js `startThread` throws on a message with a thread and `message.thread` is cache-only; the splitter cuts at every blank line; questions follow `lastPosted` into the thread; the bot already has thread permission.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. Shipped the goal: `postInThread` in `text.js` (thread/DM → post there; existing thread on the message → reuse, cached or fetched by id; else start one; text that fits = one message), `sendLongResponse` delegates its long case to it, `summariseLinks` edits in place only in a thread/DM with a fitting summary and otherwise always threads, and caches the link on the thread too. ADR 0001 and the CONTEXT.md glossary line record the decision. @mention Q&A, splitter chunking, and placeholder placement untouched.
+
+### Violation Checklist
+- [x] **Complexity Creep** — Line-Count Budget FIRED: 118 vs 60 (+97%); production +18 net, the rest tests + the requested ADR. Diagnosed in simplicity_review.md.
+- [ ] **Scope Bleed** — none; CONTEXT.md table re-padded by prettier (whitespace only).
+- [ ] **Style Drift** — none.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/summary-always-thread/verification_matrix.md`
+
+6 PASS, 3 PENDING (2 live Discord checks, lifecycle at merge). Suite 130/130 (+5). `summariseLinks` is not unit-testable (lives in the entrypoint); its branch is covered through `postInThread` + the live row.
+
+### Residual risk carried to handover
+- A long summary in a thread still posts one message per paragraph (splitter cuts at every blank line) — pre-existing, now more visible; separate issue if it bothers members.
+- Side effect: `sendLongResponse` (long @mention answers) no longer throws when the message already has a thread — it reuses it. Strictly a fix.

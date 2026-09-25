@@ -35,6 +35,7 @@ const {
   safeReply,
   buildThreadTitle,
   sendLongResponse,
+  postInThread,
 } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
@@ -495,23 +496,29 @@ async function summariseLinks(message, links) {
     const parts = summaries.map((s) => ({ ...s, split: splitQuestions(s.summary) }));
     const response = parts.map((p) => (p.split ? p.split.body : p.summary)).join('\n---\n');
 
-    // If response is too long, delete pending msg and use thread splitter. Name the thread
-    // after the first link's embed title (falls back to the generic title with no embed).
+    // A summary always goes in a thread so the channel stays clean and the conversation
+    // happens there (issue f16ff0f, ADR 0001) — named after the first link's embed title.
+    // Already in a thread or a DM (no nesting), a summary that fits edits the placeholder.
     let lastPosted;
-    if (response.length > DISCORD_MSG_LIMIT) {
+    const inPlace = message.channel.isThread() || message.channel.isDMBased();
+    if (inPlace && response.length <= DISCORD_MSG_LIMIT) {
+      lastPosted = await pendingMsg.edit(response);
+    } else {
       await pendingMsg.delete();
       const threadTitle = buildThreadTitle(extractLinkMeta(message, linksToProcess[0])?.title);
-      lastPosted = (await sendLongResponse(message, response, threadTitle)).at(-1);
-    } else {
-      lastPosted = await pendingMsg.edit(response);
+      lastPosted = (await postInThread(message, response, threadTitle)).at(-1);
     }
     // Questions reply to the last summary message and resume that link's own Hermes session.
     for (const p of parts) {
       if (p.split) await postQuestions(lastPosted, p.split.questions, p.sessionId);
     }
 
-    // Cache the last link for follow-up questions in this channel
+    // Cache the last link for follow-up questions in this channel — and in the summary's
+    // thread, where the follow-up conversation now happens.
     setCachedLink(message.channel.id, linksToProcess[0]);
+    if (lastPosted.channel.id !== message.channel.id) {
+      setCachedLink(lastPosted.channel.id, linksToProcess[0]);
+    }
 
     // Honest abstention vs real summary: summarizeLink returns messagesFR.linkUnreadable verbatim
     // when Hermes couldn't read the content (hermes-cli.js). If EVERY posted summary is that

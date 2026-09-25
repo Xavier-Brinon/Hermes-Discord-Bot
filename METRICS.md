@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-23T14:00:31Z
-source_count: 34
+timestamp: 2026-09-25T06:39:25Z
+source_count: 35
 ---
 
 # Metrics — @YackShavingSkill
@@ -46,6 +46,7 @@ they do not represent current drift. Canonical definition:
 | retire-watchdog | STANDARD | PASS | 100% |
 | stale-doc-refs | STANDARD | PASS | 100% |
 | strip-reading-progress | STANDARD | PASS | 100% |
+| summary-always-thread | STANDARD | PASS | 47% |
 | summary-format | STANDARD | PASS | 100% |
 | summary-questions | STANDARD | PASS | 100% |
 | summary-retry-guard | STANDARD | PASS | 100% |
@@ -58,14 +59,14 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 34 |
+| Total tasks | 35 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 98.4% |
+| Mean Scope Adherence | 97.0% |
 
 ## Violations by type
 | Type | Count across all tasks |
 |------|------------------------|
-| Complexity Creep | 2 |
+| Complexity Creep | 3 |
 | Scope Bleed | 0 |
 | Style Drift | 1 |
 
@@ -106,3 +107,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-23T08:03:52Z | dm-channel-type | 100% |
 | 2026-09-23T14:00:16Z | help-reply-to-continue | 100% |
 | 2026-09-23T14:00:16Z | readme-token-check | 100% |
+| 2026-09-25T06:36:44Z | summary-always-thread | 47% |
