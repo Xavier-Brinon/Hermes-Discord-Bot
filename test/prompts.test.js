@@ -15,6 +15,7 @@ const {
   buildLinkPrompt,
   buildSummaryFormat,
   splitQuestions,
+  titleFromSummary,
   questionFrom,
   buildQuestionReply,
   QUESTION_PREFIX,
@@ -403,4 +404,28 @@ test('buildQuestionReply — quotes the question before the member reply', () =>
     buildQuestionReply('Pourquoi ?', 'Parce que.'),
     'En réponse à ta question « Pourquoi ? » : Parce que.'
   );
+});
+
+// --- titleFromSummary (issue 0ffd609) ---------------------------------------
+
+test('titleFromSummary — the « titre » of the intro line', () => {
+  const summary =
+    "Voici un résumé de l'article « On aime dire que c'est un robinet : le stérilet masculin » de France 3 :\n\n**Idée principale** : x.";
+  assert.equal(
+    titleFromSummary(summary),
+    "On aime dire que c'est un robinet : le stérilet masculin"
+  );
+});
+
+test('titleFromSummary — only the intro line counts; none there → null', () => {
+  assert.equal(
+    titleFromSummary('Résumé sans titre.\n\n**Points clés** : « cité » plus bas.'),
+    null
+  );
+});
+
+test('titleFromSummary — abstention, empty or missing summary → null', () => {
+  assert.equal(titleFromSummary("Je n'ai pas pu lire le contenu de ce lien."), null);
+  assert.equal(titleFromSummary(''), null);
+  assert.equal(titleFromSummary(undefined), null);
 });

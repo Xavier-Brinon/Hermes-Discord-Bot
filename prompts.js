@@ -64,6 +64,14 @@ function splitQuestions(summary) {
   return { body, questions };
 }
 
+// The « titre » from a summary's intro line (`Voici un résumé du … « [titre] » de …`), or null when
+// the first line has none (abstention, off-format). Names the thread of a link with no embed
+// (issue 0ffd609).
+function titleFromSummary(summary) {
+  const intro = (summary || '').trim().split('\n')[0];
+  return intro.match(/«\s*([^»]+?)\s*»/)?.[1] ?? null;
+}
+
 // A posted question message is `❓ <question>`. A reply to one tells Hermes which question the
 // member is answering; the rest of the context comes from resuming the summary's own session.
 const QUESTION_PREFIX = '❓ ';
@@ -245,6 +253,7 @@ module.exports = {
   buildLinkPrompt,
   buildSummaryFormat,
   splitQuestions,
+  titleFromSummary,
   QUESTION_PREFIX,
   questionFrom,
   buildQuestionReply,

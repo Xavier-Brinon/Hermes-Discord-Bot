@@ -22,6 +22,7 @@ const {
   buildRecapPrompt,
   extractThemes,
   splitQuestions,
+  titleFromSummary,
   QUESTION_PREFIX,
   questionFrom,
   buildQuestionReply,
@@ -497,7 +498,8 @@ async function summariseLinks(message, links) {
     const response = parts.map((p) => (p.split ? p.split.body : p.summary)).join('\n---\n');
 
     // A summary always goes in a thread so the channel stays clean and the conversation
-    // happens there (issue f16ff0f, ADR 0001) — named after the first link's embed title.
+    // happens there (issue f16ff0f, ADR 0001) — named after the first link's embed title, or
+    // the summary's own « titre » when the message has no embed (issue 0ffd609).
     // Already in a thread or a DM (no nesting), a summary that fits edits the placeholder.
     let lastPosted;
     const inPlace = message.channel.isThread() || message.channel.isDMBased();
@@ -505,7 +507,9 @@ async function summariseLinks(message, links) {
       lastPosted = await pendingMsg.edit(response);
     } else {
       await pendingMsg.delete();
-      const threadTitle = buildThreadTitle(extractLinkMeta(message, linksToProcess[0])?.title);
+      const threadTitle = buildThreadTitle(
+        extractLinkMeta(message, linksToProcess[0])?.title || titleFromSummary(summaries[0].summary)
+      );
       lastPosted = (await postInThread(message, response, threadTitle)).at(-1);
     }
     // Questions reply to the last summary message and resume that link's own Hermes session.
