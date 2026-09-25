@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-25T08:03:52Z
-source_count: 38
+timestamp: 2026-09-25T08:51:42Z
+source_count: 39
 ---
 
 # Metrics — @YackShavingSkill
@@ -46,6 +46,7 @@ they do not represent current drift. Canonical definition:
 | reply-chain-sessions | STANDARD | PASS | 100% |
 | reply-to-bot | STANDARD | PASS | 100% |
 | retire-watchdog | STANDARD | PASS | 100% |
+| soul-persona-dependency | TRIVIAL | PASS | 100% |
 | stale-doc-refs | STANDARD | PASS | 100% |
 | strip-reading-progress | STANDARD | PASS | 100% |
 | summary-always-thread | STANDARD | PASS | 47% |
@@ -62,9 +63,9 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 38 |
+| Total tasks | 39 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 95.6% |
+| Mean Scope Adherence | 95.7% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -114,3 +115,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-25T07:32:34Z | hermes-profile | 39% |
 | 2026-09-25T08:02:29Z | summary-title-fallback | 100% |
 | 2026-09-25T08:03:49Z | delete-thread-notice | 100% |
+| 2026-09-25T08:51:39Z | soul-persona-dependency | 100% |
