@@ -16,6 +16,7 @@ const {
   buildThreadTitle,
   sendLongResponse,
   postInThread,
+  isOwnThreadNotice,
 } = require('../text');
 
 // --- unwrapText -----------------------------------------------------------
@@ -403,4 +404,20 @@ test('postInThread — in a thread or a DM: posts there, no new thread', async (
     assert.deepEqual(posted, channel.sent);
     assert.equal(posted.length, 1);
   }
+});
+
+// --- isOwnThreadNotice (issue 21fd897) --------------------------------------
+
+test("isOwnThreadNotice — only the bot's own ThreadCreated notice", () => {
+  const bot = 'bot1';
+  const THREAD_CREATED = 18; // MessageType.ThreadCreated
+  assert.equal(isOwnThreadNotice({ type: THREAD_CREATED, author: { id: bot } }, bot), true);
+  assert.equal(isOwnThreadNotice({ type: THREAD_CREATED, author: { id: 'member' } }, bot), false);
+  assert.equal(
+    isOwnThreadNotice({ type: 0, author: { id: bot } }, bot),
+    false,
+    'own normal message'
+  );
+  assert.equal(isOwnThreadNotice({ type: 0, author: { id: 'member' } }, bot), false);
+  assert.equal(isOwnThreadNotice({ type: THREAD_CREATED, author: null }, bot), false);
 });

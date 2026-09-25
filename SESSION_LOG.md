@@ -1384,3 +1384,47 @@ PASSED. `HERMES_PROFILE` in config.js (default `discord-bot`), substituted at bo
 ### Residual risk carried to handover
 - The cutover itself is still gated by the epic's remaining checks (recap eval + a real 📝 run on discord-bot-021).
 - `evals/run-recap-eval.js` defaults `HERMES_BIN` to `hermes` on PATH (unchanged) — on the VPS that is 0.21; pass HERMES_BIN explicitly for a 0.16 baseline.
+
+# Task: delete-thread-notice
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** A pure `isOwnThreadNotice(message, botId)` in `text.js` (type ThreadCreated AND author = the bot) and, at the top of `messageCreate` before the bot-author return, a best-effort `delete()` of such a message; ADR 0001 gains one consequence line. I will NOT fetch channel history after startThread, touch members' notices, or add a config switch.
+- **Scope Boundaries:**
+  - In-scope: `text.js`, `hermes-discord-bot-clean.js`, `test/text.test.js`, `docs/adr/0001-link-summaries-always-in-a-thread.md`
+  - Out-of-scope: `prompts.js`, `cache.js`, `hermes-cli.js`, `config.js`, the intents list
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — one predicate + one early branch in the existing handler, same best-effort `catch` shape as finalizeReaction.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no history scan, no retry, no per-channel setting.
+
+### Assumptions
+`.artifacts/delete-thread-notice/pre_computation_block.md`
+
+*(3 assumptions: the notice arrives as messageCreate with author = the thread's creator (HIGH, Discord docs); GuildMessages intent already covers it (HIGH); the bot's Manage Messages covers deleting system messages (MEDIUM — verified only live; failure is logged, harmless).)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. `isOwnThreadNotice` in text.js (ThreadCreated AND author = bot), a best-effort delete at the top of `messageCreate` before the bot-author return, one test covering own/member/normal/null-author, ADR 0001 consequence line. No history fetch, retry or setting.
+
+### Violation Checklist
+- [x] **Complexity Creep** — 38 vs 30 (+27%), marginal; comments + prettier split. Diagnosed in simplicity_review.md. Budget fixed at Post-Flight.
+- [ ] **Scope Bleed** — none.
+- [ ] **Style Drift** — none; French console.error like its neighbours.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/delete-thread-notice/verification_matrix.md`
+
+5 PASS, 2 PENDING. Suite 135/135 (+1).
+
+### Residual risk carried to handover
+- Assumption 3 (Manage Messages covers system messages) is only provable live; a miss logs "Suppression de la notice de fil échouée" and leaves today's behaviour.
+- Also removes the notice for recap and long-answer threads when their starter message isn't the latest — consistent with ADR 0001.

@@ -37,6 +37,7 @@ const {
   buildThreadTitle,
   sendLongResponse,
   postInThread,
+  isOwnThreadNotice,
 } = require('./text');
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
@@ -214,6 +215,14 @@ process.on('uncaughtException', (err) => {
 });
 
 client.on('messageCreate', async (message) => {
+  // Drop Discord's "Le Mistral Bot started a thread" notice so a thread the bot opens leaves
+  // the channel clean (issue 21fd897, ADR 0001). Best-effort: needs Manage Messages.
+  if (isOwnThreadNotice(message, client.user.id)) {
+    message
+      .delete()
+      .catch((e) => console.error('Suppression de la notice de fil échouée:', e.message));
+    return;
+  }
   if (message.author.bot) return;
   if (PROCESSED_MESSAGES.has(message.id)) return;
 

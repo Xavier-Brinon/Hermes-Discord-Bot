@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-25T08:02:32Z
-source_count: 37
+timestamp: 2026-09-25T08:03:52Z
+source_count: 38
 ---
 
 # Metrics — @YackShavingSkill
@@ -22,6 +22,7 @@ they do not represent current drift. Canonical definition:
 |---------|------|-------------|-----------------|
 | catch-hygiene | TRIVIAL | PASS | 100% |
 | d583385-prettierignore | STANDARD | PASS | 100% |
+| delete-thread-notice | STANDARD | PASS | 100% |
 | diagnostic-pitfalls | TRIVIAL | PASS | 100% |
 | dm-channel-type | TRIVIAL | PASS | 100% |
 | embed-anchor-summary | STANDARD | PASS | 100% |
@@ -61,14 +62,14 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 37 |
+| Total tasks | 38 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 95.5% |
+| Mean Scope Adherence | 95.6% |
 
 ## Violations by type
 | Type | Count across all tasks |
 |------|------------------------|
-| Complexity Creep | 3 |
+| Complexity Creep | 4 |
 | Scope Bleed | 1 |
 | Style Drift | 1 |
 
@@ -112,3 +113,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-25T06:36:44Z | summary-always-thread | 47% |
 | 2026-09-25T07:32:34Z | hermes-profile | 39% |
 | 2026-09-25T08:02:29Z | summary-title-fallback | 100% |
+| 2026-09-25T08:03:49Z | delete-thread-notice | 100% |

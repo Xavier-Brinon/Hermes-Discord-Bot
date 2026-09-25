@@ -7,6 +7,7 @@
 
 'use strict';
 
+const { MessageType } = require('discord.js');
 const { messagesFR, DISCORD_MSG_LIMIT, LINK_PATTERN } = require('./config');
 
 // Global variant of config.LINK_PATTERN to collect EVERY URL in a message — String.match
@@ -209,6 +210,13 @@ function buildThreadTitle(raw) {
   return `${cut}…`;
 }
 
+// Discord posts a ThreadCreated system message ("X started a thread") in the channel when a
+// thread starts on a message that is not the latest. True only for the bot's OWN notice, which the
+// bot deletes so the channel stays clean (issue 21fd897, ADR 0001); a member's is left alone.
+function isOwnThreadNotice(message, botId) {
+  return message.type === MessageType.ThreadCreated && message.author?.id === botId;
+}
+
 // Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
 // and post the chunks — directly in a thread, or in a new thread otherwise. `threadTitle`
 // names a freshly-created thread (default keeps the old generic title); callers derive a
@@ -257,4 +265,5 @@ module.exports = {
   buildThreadTitle,
   sendLongResponse,
   postInThread,
+  isOwnThreadNotice,
 };

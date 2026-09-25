@@ -22,6 +22,9 @@ fit in one message and ended up in the channel along with their question replies
   thread instead of failing.
 - **The "🔄 Je récupère…" placeholder** still appears in the channel while Hermes works,
   and is deleted when the summary is posted. The channel ends up clean.
+- **Discord's "started a thread" notice**, posted in the channel when the thread starts on
+  a message that isn't the latest, is deleted by the bot (issue 21fd897). Only the bot's own
+  notices; a member's are left alone.
 - **Follow-ups in the thread:** the thread gets the summary's cached link. A ❓ question,
   when there is one, records the summary's Hermes session on the thread. An @mention
   there has the article in context.
