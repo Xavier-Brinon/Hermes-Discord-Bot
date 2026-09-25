@@ -14,6 +14,7 @@ variant file) and re-run.
 node evals/run-recap-eval.js                 # shipped prompt, 5 runs/fixture
 node evals/run-recap-eval.js --runs 10       # more runs = tighter rate
 HERMES_BIN=/data/.local/bin/hermes node evals/run-recap-eval.js   # explicit binary
+HERMES_BIN=/opt/venv/bin/hermes HERMES_PROFILE=discord-bot-021 node evals/run-recap-eval.js   # another version + its profile
 ```
 
 Needs the real `hermes` binary and the `discord-bot` profile — the runner sends

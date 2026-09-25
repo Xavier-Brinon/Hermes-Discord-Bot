@@ -1340,3 +1340,47 @@ PASSED. Shipped the goal: `postInThread` in `text.js` (thread/DM → post there;
 ### Residual risk carried to handover
 - A long summary in a thread still posts one message per paragraph (splitter cuts at every blank line) — pre-existing, now more visible; separate issue if it bothers members.
 - Side effect: `sendLongResponse` (long @mention answers) no longer throws when the message already has a thread — it reuses it. Strictly a fix.
+
+# Task: hermes-profile
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One `HERMES_PROFILE` constant in `config.js` (env, default `discord-bot`) replacing the two hard-coded `-p discord-bot` in `hermes-cli.js` and the one in the recap eval; one env-override test; a README cutover/rollback runbook. I will NOT add profile validation, a startup probe, per-flow profiles, or touch the unmerged 9afaeac probe.
+- **Scope Boundaries:**
+  - In-scope: `config.js`, `hermes-cli.js`, `evals/run-recap-eval.js`, `test/modules.test.js`, `README.md`
+  - Out-of-scope: `hermes-discord-bot-clean.js`, `prompts.js`, `cache.js`, `manage_hermes.sh`, `ops/`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` — mirror the existing env-overridable `HERMES_BIN` shape (issue df0d693) exactly.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` — no profile registry, no per-flow routing, no auto-detection.
+
+### Assumptions
+`.artifacts/hermes-profile/pre_computation_block.md`
+
+*(3 assumptions, all HIGH: an unset var keeps today's argv; the gateway hook strips HERMES_* so the vars must live in the encrypted .env; sessions do not carry across profiles, so the cutover clears .session_cache.json.)*
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. `HERMES_PROFILE` in config.js (default `discord-bot`), substituted at both hermes-cli.js `-p` sites and threaded through the recap eval; one override test; README §Switching the Hermes version (cutover + rollback, set via `dotenvx set` because the hook strips inherited `HERMES_*`, clear `.session_cache.json`). Stub-binary capture confirms the unset argv is unchanged.
+
+### Violation Checklist
+- [ ] **Complexity Creep** — 76 vs 70 (+9%); budget fixed at Post-Flight (process miss).
+- [x] **Scope Bleed** — `evals/README.md` (+1 line documenting the eval override) was not declared; it documents the in-scope eval change.
+- [ ] **Style Drift** — none; mirrors the HERMES_BIN shape.
+- [ ] **Issue Lifecycle** — PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/hermes-profile/verification_matrix.md`
+
+5 PASS, 2 PENDING. Suite 131/131 (+1).
+
+### Residual risk carried to handover
+- The cutover itself is still gated by the epic's remaining checks (recap eval + a real 📝 run on discord-bot-021).
+- `evals/run-recap-eval.js` defaults `HERMES_BIN` to `hermes` on PATH (unchanged) — on the VPS that is 0.21; pass HERMES_BIN explicitly for a 0.16 baseline.

@@ -146,6 +146,41 @@ died), and could not survive a container recreate — so it was retired.
 `manage_hermes.sh` keeps PM2's saved process list current via `pm2 save` on every
 start/restart.
 
+## Switching the Hermes version
+
+The bot runs whichever binary `HERMES_BIN` names, with the profile `HERMES_PROFILE`
+names (defaults: `/data/.local/bin/hermes` and `discord-bot`). A new Hermes version
+usually needs its own profile: 0.21 fails every call on the `discord-bot` profile,
+whose `agent.reasoning_effort: max` Mistral rejects (issue 1ae5380). So a cutover
+changes both variables, and a rollback removes both.
+
+Set them in the encrypted `.env`, never in the shell: the gateway hook strips every
+inherited `HERMES_*` variable before it starts the bot.
+
+**Cutover** (example: 0.21 with the fixed clone profile):
+
+```bash
+cd /data/workspace
+npx dotenvx set HERMES_BIN /opt/venv/bin/hermes
+npx dotenvx set HERMES_PROFILE discord-bot-021
+rm -f .session_cache.json   # sessions live in each profile's own state.db
+./manage_hermes.sh restart
+```
+
+**Rollback:**
+
+```bash
+cd /data/workspace
+npx dotenvx set HERMES_BIN /data/.local/bin/hermes
+npx dotenvx set HERMES_PROFILE discord-bot
+rm -f .session_cache.json
+./manage_hermes.sh restart
+```
+
+Clearing `.session_cache.json` means a reply to an answer from before the switch
+starts a fresh conversation, not an error. Test a profile before switching with
+`npx dotenvx run -f .env -- <bin> -p <profile> chat -q "Dis bonjour." -Q --source tool`.
+
 ## Security
 
 - The Discord token is **encrypted** in `.env` via dotenvx

@@ -15,7 +15,7 @@
 //   node evals/run-recap-eval.js [--runs N] [--prompt FILE] [--bin HERMES]
 //                                [--fixtures DIR]
 //
-// Needs the real `hermes` binary + the `discord-bot` profile (runs wherever that
+// Needs the real `hermes` binary + the `discord-bot` profile (or HERMES_PROFILE; runs wherever that
 // lives — locally if installed, else on the VPS).
 
 const { execFile } = require('node:child_process');
@@ -29,6 +29,7 @@ function parseArgs(argv) {
     runs: 5,
     prompt: null,
     bin: process.env.HERMES_BIN || 'hermes',
+    profile: process.env.HERMES_PROFILE || 'discord-bot',
     fixtures: path.join(__dirname, 'fixtures', 'recap'),
   };
   for (let i = 2; i < argv.length; i++) {
@@ -50,13 +51,13 @@ function parseArgs(argv) {
   return a;
 }
 
-function runHermes(bin, prompt) {
+function runHermes(bin, profile, prompt) {
   // Mirror the bot's recap call: askHermes(recapPrompt, context, false, 120000, true)
-  // → args [-p discord-bot chat -q <prompt> -Q], 120s timeout, no web tools.
+  // → args [-p <profile> chat -q <prompt> -Q], 120s timeout, no web tools.
   return new Promise((resolve) => {
     execFile(
       bin,
-      ['-p', 'discord-bot', 'chat', '-q', prompt, '-Q'],
+      ['-p', profile, 'chat', '-q', prompt, '-Q'],
       { timeout: 120000, maxBuffer: 1024 * 1024 },
       (error, stdout) => {
         if (error) {
@@ -100,7 +101,7 @@ async function main() {
       totalThemes = 0;
 
     for (let r = 0; r < args.runs; r++) {
-      const res = await runHermes(args.bin, payload);
+      const res = await runHermes(args.bin, args.profile, payload);
       if (!res.ok) {
         errors++;
         continue;

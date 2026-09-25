@@ -10,6 +10,9 @@ const path = require('path');
 
 // Hermes CLI binary + workspace (env-overridable; defaults = the VPS layout).
 const HERMES_BIN = process.env.HERMES_BIN || '/data/.local/bin/hermes';
+// Hermes profile passed as `-p` (issue 336fafc). A HERMES_BIN cutover needs a profile the new
+// version can run — see README §Switching the Hermes version.
+const HERMES_PROFILE = process.env.HERMES_PROFILE || 'discord-bot';
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/data/workspace';
 
 // yt-dlp binary used to pull YouTube captions (issue 7801304). Same env-overridable shape as
@@ -118,6 +121,7 @@ const messagesFR = {
 
 module.exports = {
   HERMES_BIN,
+  HERMES_PROFILE,
   YTDLP_BIN,
   WORKSPACE_DIR,
   CACHE_FILE,

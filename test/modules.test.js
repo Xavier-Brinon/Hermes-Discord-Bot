@@ -12,6 +12,7 @@ test('config — exports constants, paths, patterns, messagesFR', () => {
   const c = require('../config');
   for (const k of [
     'HERMES_BIN',
+    'HERMES_PROFILE',
     'CACHE_FILE',
     'SESSION_CACHE_FILE',
     'TIMEOUT_RECAP',
@@ -76,5 +77,22 @@ test('config — HERMES_BIN / cache paths honour env overrides (df0d693)', () =>
     else process.env.HERMES_BIN = saved.bin;
     if (saved.ws === undefined) delete process.env.WORKSPACE_DIR;
     else process.env.WORKSPACE_DIR = saved.ws;
+  }
+});
+
+test('config — HERMES_PROFILE defaults to discord-bot and honours the env (336fafc)', () => {
+  const resolved = require.resolve('../config');
+  const saved = process.env.HERMES_PROFILE;
+  try {
+    delete require.cache[resolved];
+    delete process.env.HERMES_PROFILE;
+    assert.equal(require('../config').HERMES_PROFILE, 'discord-bot');
+    delete require.cache[resolved];
+    process.env.HERMES_PROFILE = 'discord-bot-021';
+    assert.equal(require('../config').HERMES_PROFILE, 'discord-bot-021');
+  } finally {
+    delete require.cache[resolved];
+    if (saved === undefined) delete process.env.HERMES_PROFILE;
+    else process.env.HERMES_PROFILE = saved;
   }
 });

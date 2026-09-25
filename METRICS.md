@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-25T06:39:25Z
-source_count: 35
+timestamp: 2026-09-25T07:32:58Z
+source_count: 36
 ---
 
 # Metrics — @YackShavingSkill
@@ -28,6 +28,7 @@ they do not represent current drift. Canonical definition:
 | gateway-autostart | STANDARD | PASS | 100% |
 | global-error-handlers | STANDARD | PASS | 100% |
 | help-reply-to-continue | TRIVIAL | PASS | 100% |
+| hermes-profile | STANDARD | PASS | 39% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
 | max-turns-cap | STANDARD | PASS | 100% |
 | mention-gate | STANDARD | PASS | 100% |
@@ -59,15 +60,15 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 35 |
+| Total tasks | 36 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 97.0% |
+| Mean Scope Adherence | 95.4% |
 
 ## Violations by type
 | Type | Count across all tasks |
 |------|------------------------|
 | Complexity Creep | 3 |
-| Scope Bleed | 0 |
+| Scope Bleed | 1 |
 | Style Drift | 1 |
 
 ## Trend
@@ -108,3 +109,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-23T14:00:16Z | help-reply-to-continue | 100% |
 | 2026-09-23T14:00:16Z | readme-token-check | 100% |
 | 2026-09-25T06:36:44Z | summary-always-thread | 47% |
+| 2026-09-25T07:32:34Z | hermes-profile | 39% |

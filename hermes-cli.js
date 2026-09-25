@@ -9,6 +9,7 @@ const { execFile } = require('child_process');
 const path = require('path');
 const {
   HERMES_BIN,
+  HERMES_PROFILE,
   TIMEOUT_NORMAL,
   TIMEOUT_WEB,
   MAX_TURNS_LINK,
@@ -86,9 +87,9 @@ function askHermes(
       }
     }
 
-    const args = ['-p', 'discord-bot', 'chat', '-q', prompt];
+    const args = ['-p', HERMES_PROFILE, 'chat', '-q', prompt];
     if (sessionId) {
-      args.splice(2, 0, '--resume', sessionId); // insert --resume <id> after -p discord-bot
+      args.splice(2, 0, '--resume', sessionId); // insert --resume <id> after -p <profile>
     }
     if (useWebTools) {
       args.splice(sessionId ? 4 : 2, 0, '-t', 'web'); // insert -t web after chat
@@ -175,7 +176,7 @@ function runLinkSummary(url, context, meta, transcript) {
       // positional splices askHermes uses for --resume / -t web.
       [
         '-p',
-        'discord-bot',
+        HERMES_PROFILE,
         'chat',
         '-q',
         prompt,
