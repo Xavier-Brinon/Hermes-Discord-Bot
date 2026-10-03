@@ -47,5 +47,5 @@ terminal output, rather than calling a hosted API.
 - `README.md` — operational runbook (start/stop/watchdog/troubleshooting).
 - `AGENTS.md` — architecture, conventions, Radicle workflow, `@YackShavingSkill`
   master rules.
-- `CONTEXT.md` — domain glossary.
+- `GLOSSARY.org` — domain glossary.
 - Radicle issues (`rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`) — the tracked backlog.

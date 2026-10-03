@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-09-25T12:12:32Z
-source_count: 42
+timestamp: 2026-10-03T09:26:31Z
+source_count: 43
 ---
 
 # Metrics — @YackShavingSkill
@@ -29,6 +29,7 @@ they do not represent current drift. Canonical definition:
 | embed-anchor-summary | STANDARD | PASS | 100% |
 | gateway-autostart | STANDARD | PASS | 100% |
 | global-error-handlers | STANDARD | PASS | 100% |
+| glossary-org | TRIVIAL | PASS | 100% |
 | health-check-docs | TRIVIAL | PASS | 100% |
 | help-reply-to-continue | TRIVIAL | PASS | 100% |
 | hermes-profile | STANDARD | PASS | 39% |
@@ -66,9 +67,9 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 42 |
+| Total tasks | 43 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 96.0% |
+| Mean Scope Adherence | 96.1% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -122,3 +123,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-25T08:51:39Z | soul-persona-dependency | 100% |
 | 2026-09-25T10:47:04Z | drop-reading-trace | 100% |
 | 2026-09-25T12:12:28Z | health-check-docs | 100% |
+| 2026-10-03T09:26:28Z | glossary-org | 100% |
