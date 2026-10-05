@@ -31,9 +31,12 @@ links on demand.
 | VPS (canonical)  | `./manage_hermes.sh {start\|stop\|restart\|status\|logs}`       |
 | VPS (npm equiv.) | `npm run pm2:start` / `pm2:restart` / `pm2:status` / `pm2:logs` |
 
-Deployment harness on the VPS (`/data/workspace`): **PM2** supervises the bot, a
-bash **watchdog** re-checks PM2 every 60 s, and **dotenvx** decrypts secrets at
-launch. See `README.md` for the operational runbook.
+Deployment harness on the VPS (`/data/workspace`): **PM2** supervises the bot
+as a single process and restarts it on crash, a **gateway hook** in
+`/data/hooks/` restarts it when the container is recreated, and **dotenvx**
+decrypts secrets at launch. There is no bash watchdog. The bot must run as
+exactly **one** process (see `README.md` §Watch points). See `README.md` for the
+operational runbook.
 
 ## Conventions
 

@@ -82,6 +82,12 @@ confirm a reply in French.
 - **Restarts**: PM2 auto-restarts the bot on crash. A climbing `↺` count in
   `./manage_hermes.sh status` means a crash loop — watch the logs right after a
   redeployment.
+- **Exactly one instance**: the bot holds a single Discord gateway connection,
+  so every running copy logs in and answers each message again. Never start it
+  in PM2 cluster mode (`-i`), never `pm2 start` it a second time, and don't move
+  it to a multi-worker runtime (e.g. Platformatic Watt). The bot spends its time
+  waiting on Hermes, not on CPU, so extra workers would gain nothing anyway. A
+  bot that outgrows one process needs Discord sharding, not workers.
 - **One-way street**: the VPS _pulls_ the code (`git pull`); we never push to
   `/data/workspace`. The canonical source stays Radicle + `origin`.
 
