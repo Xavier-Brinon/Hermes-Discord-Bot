@@ -54,10 +54,25 @@ function cleanupContextFile(fullPath) {
   }
 }
 
+// One grep-able line per Hermes call (issue 6b61611). README §Health check turns these into
+// per-flow percentiles; `limit` shows how close a call came to its execFile timeout.
+function formatTimingLine({ flow, web, outcome, elapsedMs, limitMs }) {
+  const elapsed = (elapsedMs / 1000).toFixed(1);
+  const limit = Math.round(limitMs / 1000);
+  return `⏱️ hermes flow=${flow} web=${web ? 'yes' : 'no'} outcome=${outcome} elapsed=${elapsed}s limit=${limit}s`;
+}
+
+// Start the clock for one call; the returned function logs its timing line for an outcome.
+function startTiming(flow, web, limitMs) {
+  const start = Date.now();
+  return (outcome) =>
+    console.log(formatTimingLine({ flow, web, outcome, elapsedMs: Date.now() - start, limitMs }));
+}
+
 // Ask Hermes a question. Returns { response, sessionId } — sessionId can resume a conversation.
-// opts: { extraContext, useWebTools, customTimeout, sessionId, summarize }.
+// opts: { extraContext, useWebTools, customTimeout, sessionId, summarize, flow }.
 // summarize=true appends the shared structured-summary format (used when an @mention
-// carries a link — see the entrypoint's wantsSummary).
+// carries a link — see the entrypoint's wantsSummary). flow only labels the timing line.
 function askHermes(
   question,
   {
@@ -66,10 +81,13 @@ function askHermes(
     customTimeout = null,
     sessionId = null,
     summarize = false,
+    flow = sessionId ? 'resume' : 'ask',
   } = {}
 ) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
+    const timeout = customTimeout || (useWebTools ? TIMEOUT_WEB : TIMEOUT_NORMAL);
+    const logTiming = startTiming(flow, useWebTools, timeout);
 
     // Always instruct Hermes to respond in French, no hard line breaks (see prompts.js)
     let prompt = buildAskPrompt(question, extraContext, summarize);
@@ -106,7 +124,7 @@ function askHermes(
       HERMES_BIN,
       args,
       {
-        timeout: customTimeout || (useWebTools ? TIMEOUT_WEB : TIMEOUT_NORMAL),
+        timeout,
         maxBuffer: 1024 * 1024,
       },
       (error, stdout, stderr) => {
@@ -114,6 +132,7 @@ function askHermes(
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
         if (error) {
+          logTiming(error.killed ? 'timeout' : 'error');
           console.error(`❌ Hermes CLI error (${elapsed}s):`, stderr || error.message);
           console.error('   stdout was:', stdout || '(empty)');
           const err = new Error(
@@ -127,6 +146,7 @@ function askHermes(
           return reject(err);
         }
 
+        logTiming('ok');
         console.log(`📥 Response received from Hermes (${elapsed}s)`);
         // Log full Hermes output to PM2 for debugging
         console.log('--- HERMES OUTPUT ---');
@@ -167,6 +187,7 @@ function runLinkSummary(url, context, meta, transcript) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     const prompt = buildLinkPrompt(url, context, meta, transcript);
+    const logTiming = startTiming('link', true, TIMEOUT_WEB);
 
     console.log(`📤 Summarizing link: ${url}`);
 
@@ -196,6 +217,7 @@ function runLinkSummary(url, context, meta, transcript) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
         if (error) {
+          logTiming(error.killed ? 'timeout' : 'error');
           console.error(`❌ Hermes CLI error (link, ${elapsed}s):`, stderr || error.message);
           const err = new Error(
             error.killed ? 'Le résumé a pris trop de temps.' : 'Impossible de résumer ce lien.'
@@ -216,6 +238,7 @@ function runLinkSummary(url, context, meta, transcript) {
         // prevent. Abstain instead of posting it. Tested against raw stdout because
         // parseHermesOutput strips the notice from the response. See issue 54ed189.
         if (MAX_ITERATIONS_NOTICE.test(stdout || '')) {
+          logTiming('abstain');
           console.log(`⚠️  Link summary hit the ${MAX_TURNS_LINK}-turn cap — abstaining`);
           return resolve({ summary: messagesFR.linkUnreadable, sessionId: null });
         }
@@ -226,8 +249,10 @@ function runLinkSummary(url, context, meta, transcript) {
         // the link's known title/author (or it couldn't read it) — post an honest message
         // instead of a fabricated summary. See issue 1b94451.
         if (response && new RegExp(`\\b${LINK_UNREADABLE_SENTINEL}\\b`).test(response)) {
+          logTiming('abstain');
           return resolve({ summary: messagesFR.linkUnreadable, sessionId: null });
         }
+        logTiming('ok');
         resolve({
           summary:
             response || `📎 Lien détecté : ${url}\n(Désolé, je n'ai pas pu générer un résumé.)`,
@@ -279,4 +304,4 @@ function probeHermes(bin = HERMES_BIN) {
   });
 }
 
-module.exports = { askHermes, summarizeLink, probeHermes };
+module.exports = { askHermes, summarizeLink, probeHermes, formatTimingLine };

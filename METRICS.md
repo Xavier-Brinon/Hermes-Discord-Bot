@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-10-05T09:54:41Z
-source_count: 44
+timestamp: 2026-10-05T10:17:44Z
+source_count: 45
 ---
 
 # Metrics — @YackShavingSkill
@@ -33,6 +33,7 @@ they do not represent current drift. Canonical definition:
 | glossary-org | TRIVIAL | PASS | 100% |
 | health-check-docs | TRIVIAL | PASS | 100% |
 | help-reply-to-continue | TRIVIAL | PASS | 100% |
+| hermes-call-timing | STANDARD | PASS | 100% |
 | hermes-profile | STANDARD | PASS | 39% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
 | log-hermes-bin | TRIVIAL | PASS | 100% |
@@ -68,9 +69,9 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 44 |
+| Total tasks | 45 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 96.2% |
+| Mean Scope Adherence | 96.3% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -126,3 +127,4 @@ they do not represent current drift. Canonical definition:
 | 2026-09-25T12:12:28Z | health-check-docs | 100% |
 | 2026-10-03T09:26:28Z | glossary-org | 100% |
 | 2026-10-05T09:54:37Z | docs-single-instance | 100% |
+| 2026-10-05T10:17:09Z | hermes-call-timing | 100% |

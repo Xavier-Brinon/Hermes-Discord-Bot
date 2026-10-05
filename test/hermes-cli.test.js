@@ -2,13 +2,14 @@
 
 // probeHermes (issue 9afaeac): the startup probe resolves which Hermes binary will run and
 // its version, and never rejects. Fake binaries are tiny sh scripts in a temp dir.
+// formatTimingLine (issue 6b61611): the per-call timing line the README read-out parses.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { probeHermes } = require('../hermes-cli');
+const { probeHermes, formatTimingLine } = require('../hermes-cli');
 
 function fakeBin(dir, name, body, mode = 0o755) {
   const p = path.join(dir, name);
@@ -60,4 +61,21 @@ test('non-executable file — treated as missing', async () => {
 test('--version fails — path kept, version null, error carries stderr', async () => {
   const bin = fakeBin(dir, 'hermes-broken', 'echo boom >&2; exit 1');
   assert.deepEqual(await probeHermes(bin), { path: bin, version: null, error: 'boom' });
+});
+
+test('formatTimingLine — key=value fields, seconds with one decimal, whole-second limit', () => {
+  assert.equal(
+    formatTimingLine({ flow: 'ask', web: false, outcome: 'ok', elapsedMs: 12345, limitMs: 90000 }),
+    '⏱️ hermes flow=ask web=no outcome=ok elapsed=12.3s limit=90s'
+  );
+  assert.equal(
+    formatTimingLine({
+      flow: 'link',
+      web: true,
+      outcome: 'timeout',
+      elapsedMs: 150004,
+      limitMs: 150000,
+    }),
+    '⏱️ hermes flow=link web=yes outcome=timeout elapsed=150.0s limit=150s'
+  );
 });

@@ -247,6 +247,32 @@ line:
 npx pm2 env 0 | grep -E 'HERMES_(BIN|PROFILE)'   # keep the grep: pm2 env prints every secret
 ```
 
+**Slow, not broken.** PM2's `↺` count only shows crashes. Every Hermes call also logs one
+line (issue 6b61611):
+
+```
+⏱️ hermes flow=link web=yes outcome=ok elapsed=62.3s limit=150s
+```
+
+`flow` is `ask`, `resume`, `recap` or `link`. `outcome` is `ok`, `error`, `timeout` or
+`abstain` (a 📝 link the bot declined to summarise). To get per-flow percentiles from the
+recent logs:
+
+```bash
+npx pm2 logs hermes-discord-bot --lines 5000 --nostream | grep -o 'flow=.*' \
+  | awk '{ split($1,f,"="); split($2,w,"="); split($3,o,"="); split($4,e,"=");
+           print f[2] "/" w[2], e[2] + 0, o[2] }' \
+  | sort -k1,1 -k2,2n \
+  | awk 'function rank(p, c,  i) { i = int(p * c); if (i < p * c) i++; return i < 1 ? 1 : i }
+         { k = $1; v[k, ++n[k]] = $2; if ($3 == "timeout") t[k]++ }
+         END { for (k in n) printf "%-11s n=%-4d p50=%6.1fs p95=%6.1fs max=%6.1fs timeouts=%d\n",
+                 k, n[k], v[k, rank(.5, n[k])], v[k, rank(.95, n[k])], v[k, n[k]], t[k] }' \
+  | sort
+# link/yes    n=3    p50=  88.4s p95= 150.0s max= 150.0s timeouts=1
+```
+
+A p95 creeping toward the flow's `limit` warns of timeouts before members see them.
+
 ## Troubleshooting
 
 | Problem                            | Check                                                                    |

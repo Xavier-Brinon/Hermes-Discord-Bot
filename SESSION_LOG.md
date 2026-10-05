@@ -1428,3 +1428,50 @@ PASSED. `isOwnThreadNotice` in text.js (ThreadCreated AND author = bot), a best-
 ### Residual risk carried to handover
 - Assumption 3 (Manage Messages covers system messages) is only provable live; a miss logs "Suppression de la notice de fil échouée" and leaves today's behaviour.
 - Also removes the notice for recap and long-answer threads when their starter message isn't the latest — consistent with ADR 0001.
+
+# Task: hermes-call-timing
+complexity_score: 3
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** A pure `formatTimingLine({ flow, web, outcome, elapsedMs, limitMs })` in `hermes-cli.js`, called once on every exit path of askHermes and runLinkSummary. askHermes gains a `flow` option (default `resume` when a session is resumed, else `ask`), and the recap call passes `flow: 'recap'`. README §Health check gets a grep/sed/sort/awk command printing n, p50, p95, max and timeouts per flow. I will NOT add a stats script, an in-process aggregator or a metrics endpoint, and I will not remove any existing log line.
+- **Scope Boundaries:**
+  - In-scope: `hermes-cli.js`, `hermes-discord-bot-clean.js`, `test/hermes-cli.test.js`, `README.md`
+  - Out-of-scope: `config.js`, `prompts.js`, `text.js`, `youtube.js`, `cache.js`, `recap.js`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md`: one pure helper plus one call per existing exit branch, next to the `elapsed` the code already computes.
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md`: no metrics library, no endpoint, no script file.
+
+### Assumptions
+`.artifacts/hermes-call-timing/pre_computation_block.md`
+
+*(4 assumptions, all HIGH: two functions cover every Hermes call; `error.killed` = timeout; pm2 prefixes lines so the read-out matches on fields; the VPS has grep/sed/sort/awk.)*
+
+### Line-Count Budget
+60 lines (helper 8, call sites 15, recap 1, tests 20, README 16).
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. `formatTimingLine` + `startTiming` in hermes-cli.js, one `logTiming` per exit path (6), a `flow` option defaulting to resume/ask, `flow: 'recap'` at the recap call, one test, README §Health check "Slow, not broken" with the awk read-out. No script, aggregator or endpoint; existing log lines untouched.
+
+### Violation Checklist
+- [ ] **Complexity Creep**: 75 vs 60 (+25%), at the threshold. The Simplify Trigger fired at 91 (+52%) and was acted on (two closures folded into `startTiming`). See simplicity_review.md.
+- [ ] **Scope Bleed**: none.
+- [ ] **Style Drift**: none.
+- [ ] **Issue Lifecycle**: PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/hermes-call-timing/verification_matrix.md`
+
+6 PASS, 2 PENDING. Suite 140/140 (+1).
+
+### Residual risk carried to handover
+- The read-out only covers what `pm2 logs --lines 5000` still holds; older calls fall out with log rotation.
+- A link summary's elapsed time excludes the yt-dlp transcript fetch that runs before it (TIMEOUT_TRANSCRIPT, separate budget).

@@ -339,6 +339,7 @@ client.on('messageCreate', async (message) => {
         const { response: recapResponse } = await askHermes(recapPrompt, {
           extraContext: context,
           customTimeout: TIMEOUT_RECAP,
+          flow: 'recap',
         });
         const rawResponse = formatHermesResponse(recapResponse);
 
