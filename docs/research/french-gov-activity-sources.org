@@ -1,0 +1,431 @@
+#+title: Sources for a daily French government-activity recap
+#+date: 2026-10-15
+#+options: toc:2 num:nil ^:{}
+#+startup: showall indent
+
+Checked on *2026-10-15*. I used primary sources only: official listings, live
+endpoints, official API specs and official PDFs. Anything I observed directly
+(downloads, =curl=, the PISTE Swagger) is marked /observed/. Anything that rests
+on a document alone cites that document.
+
+* TL;DR: recommendation
+| Need (v1, post around 9h Paris)      | Use                                                                                                                                                   | Why                                                                                                                                                                                                                                                                                                                                                                       |
+|--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Today's JO (texts, nature, ministry) | *DILA open data =JORFSIMPLE= daily increment* at [[https://echanges.dila.gouv.fr/OPENDATA/JORFSIMPLE/][echanges.dila.gouv.fr/OPENDATA/JORFSIMPLE/]]                                               | No account, no token and no quota. It is plain HTTPS plus a =.tar.gz= file of about 50--300 KB. Today's JO arrives between *00:20 and 02:30 Paris*, about 7 hours before the 9h post. There is one flat XML per text with =NATURE=, =TITREFULL=, =MINISTERE=, =NOR= and =ID_ELI=. There is no scraping, and Légifrance's HTML is behind a bot challenge anyway (see 1.e). |
+| Conseil des ministres (Wednesday)    | *Élysée RSS =https://www.elysee.fr/feed=* to find the compte rendu URL, then fetch that one elysee.fr page and split it on its =<h2>=/=<h3>= headings | The compte rendu appears in the feed on the same day at about 17h. It is the only fast source that can be fetched without a bot challenge. The structured option (vie-publique metadata JSON) lags until D+2 in the morning and has titles only.                                                                                                                          |
+| Fallback / later                     | Légifrance API via PISTE (=/consult/lastNJo= → =/consult/jorfCont=)                                                                                   | It returns the same data as JSON, but it needs a PISTE account, OAuth, a token refreshed every hour and quotas. It is worth it only if you need search or consolidated texts.                                                                                                                                                                                             |
+
+Bottom line for v1:
+
+- *JO*: fetch the =JORFSIMPLE_<YYYYMMDD>-00xxxx.tar.gz= file for today and
+  extract it. Read the container =JORFCONT*.xml= for the ordered sommaire
+  grouped by ministry, plus each =JORFTEXT*.xml= for its nature. Filter on
+  =NATURE ∈ {LOI, ORDONNANCE, DECRET}= and optionally =ARRETE=.
+- *CM*: on Thursday morning, post the Wednesday compte rendu found through the
+  Élysée RSS.
+
+* 1. Journal officiel « Lois et Décrets » (JORF)
+** 1.a DILA open-data dumps (=JORF= and =JORFSIMPLE=)
+*Where and licence*
+
+- Directory listing (Apache index): [[https://echanges.dila.gouv.fr/OPENDATA/JORF/][echanges.dila.gouv.fr/OPENDATA/JORF/]]. A
+  lighter twin is at [[https://echanges.dila.gouv.fr/OPENDATA/JORFSIMPLE/][echanges.dila.gouv.fr/OPENDATA/JORFSIMPLE/]] (/observed/).
+- Dataset
+  page:
+  [[https://www.data.gouv.fr/datasets/jorf-les-donnees-de-l-edition-lois-et-decrets-du-journal-officiel/][www.data.gouv.fr/datasets/jorf-les-donnees-de-l-edition-lois-et-decrets-du-journal-officiel/]].
+- Licence: Licence Ouverte v2.0. Reusers must cite DILA, the full download URL,
+  and the file name and date ([[https://echanges.dila.gouv.fr/OPENDATA/JORF/DILA_JORF_Presentation_20170824.pdf][DILA fiche JORF, 2017]]).
+- Also reachable over FTPS at =ftps://echanges.dila.gouv.fr= ([[https://www.data.gouv.fr/datasets/jorf-les-donnees-de-l-edition-lois-et-decrets-du-journal-officiel/][data.gouv.fr]]).
+
+*Cadence and naming* (/observed/ on the listing)
+
+- File name: =JORF_YYYYMMDD-HHMMSS.tar.gz=, or
+  =JORFSIMPLE_YYYYMMDD-HHMMSS.tar.gz=. The timestamp is in *Paris local time*:
+  the listing shows =00:47= for =JORF_20261015-004729.tar.gz=, and its
+  =Last-Modified= header is =Wed, 14 Oct 2026 22:47:34 GMT=.
+- There are usually *2 increments per day*:
+  - *Night* (00:20--02:30 Paris): carries *that day's JO*. Of 115 night files
+    from June to October 2026, 102 were stamped 00h, 11 were stamped 01h and 2
+    were stamped 02h.
+  - *Evening* (about 20:40--22:00 Paris, 2--7 MB): re-delivers the same day's
+    texts with enrichments, plus corrections to older JOs. Example: the evening
+    file of 2026-10-14 held 49 of the 85 texts published that morning, under the
+    same IDs, plus 7 older containers. This matches DILA's two-step delivery:
+    first the JO "as published", then "ultérieurement" the same JO enriched with
+    SGG keywords ([[https://echanges.dila.gouv.fr/OPENDATA/JORF/DILA_JORF_Presentation_20170824.pdf][fiche JORF]]).
+  - There are occasional extra files, for example =JORF_20261015-122925= (78 KB,
+    5 texts) carrying fixes.
+- The full stock is published at least once a year, for example
+  =Freemium_jorf_global_20250713-140000.tar.gz= (1.6 GB). Increments are kept
+  only since that stock (listing starts on 2025-07-13). A first-time integrator
+  "s'oblige à utiliser le dernier stock" ([[https://echanges.dila.gouv.fr/OPENDATA/JORF/DILA_JORF_Presentation_20170824.pdf][fiche]]). A daily recap only needs the
+  latest increment.
+
+*Weight* (/observed/)
+
+| Increment            | =JORF= tar.gz                                      | =JORFSIMPLE= tar.gz   |
+|----------------------+----------------------------------------------------+-----------------------|
+| Night (today's JO)   | 57 KB min / 168 KB median / 505 KB max (115 files) | 49--111 KB (examples) |
+| Evening (enrichment) | 1.8--11 MB                                         | 0.5--3 MB             |
+
+The 2026-10-14 evening =JORF= file extracts to 56 MB and 6,067 entries. The
+night file of 2026-10-15 holds 118 texts.
+
+*Archive layout, full =JORF=* (/observed/)
+
+#+begin_example
+<stamp>/jorf/global/conteneur/JORF/CONT/…/JORFCONT<id>.xml      ← one per JO issue (sommaire)
+<stamp>/jorf/global/texte/version/JORF/TEXT/…/JORFTEXT<id>.xml  ← text metadata + visas/signataires
+<stamp>/jorf/global/texte/struct/JORF/TEXT/…/JORFTEXT<id>.xml   ← text structure
+<stamp>/jorf/global/article/JORF/ARTI/…/JORFARTI<id>.xml        ← one per article
+<stamp>/jorf/global/section_ta/JORF/SCTA/…                      ← sections
+#+end_example
+
+*Archive layout, =JORFSIMPLE=* (/observed/). This one is simpler and is the one
+I recommend:
+
+#+begin_example
+<stamp>/jorf/simple/JORF/CONT/…/JORFCONT<id>.xml               ← sommaire
+<stamp>/jorf/simple/JORF/CONT/…/JORFCONT<id>/JORFTEXT<id>.xml  ← one flat file per text, articles inlined
+#+end_example
+
+*Container (=JORFCONT…xml=): the day's sommaire* (/observed/, JO n°0241 of
+2026-10-15)
+
+#+begin_src xml
+<JO><META><META_COMMUN><ID>JORFCONT000054983260</ID>
+  <ID_ELI>https://www.legifrance.gouv.fr/eli/jo/2026/10/15/0241</ID_ELI><NATURE>JO</NATURE>…
+  <META_CONTENEUR><TITRE>JORF n°0241 du 15 octobre 2026</TITRE><NUM>0241</NUM><DATE_PUBLI>2026-10-15</DATE_PUBLI>…
+<STRUCTURE_TXT>
+ <TM niv="1"><TITRE_TM>Journal officiel "Lois et Décrets"</TITRE_TM>
+  <TM niv="2"><TITRE_TM>Décrets, arrêtés, circulaires</TITRE_TM>
+   <TM niv="3"><TITRE_TM>Textes généraux</TITRE_TM>
+    <TM niv="4"><TITRE_TM>Premier ministre</TITRE_TM>
+     <LIEN_TXT idtxt="JORFTEXT000054983265" titretxt="Décret n° 2026-953 du 14 octobre 2026 relatif à …"/>
+#+end_src
+
+The =TM= headings give you the section (Lois, Ordonnances, Décrets..., Textes
+généraux, Mesures nominatives...) and the ministry. =LIEN_TXT= gives the ID and
+full title in JO order.
+
+*Text (=JORFSIMPLE= =JORFTEXT…xml=)* (/observed/)
+
+#+begin_src xml
+<TEXTE><ID>JORFTEXT000054983265</ID>
+<ID_ELI>https://www.legifrance.gouv.fr/eli/decret/2026/10/14/PRMX2627508D/jo/texte</ID_ELI>
+<NATURE>DECRET</NATURE><NUM>2026-953</NUM><NUM_PARUTION>0241</NUM_PARUTION><NUM_SEQUENCE>1</NUM_SEQUENCE>
+<NOR>PRMX2627508D</NOR><DATE_PUBLI>2026-10-15</DATE_PUBLI><DATE_TEXTE>2026-10-14</DATE_TEXTE>
+<ORIGINE_PUBLI id="JORFCONT000054983260">JORF n°0241 du 15 octobre 2026</ORIGINE_PUBLI>
+<TITREFULL>Décret n° 2026-953 du 14 octobre 2026 relatif à …</TITREFULL>
+<MINISTERE>Premier ministre</MINISTERE> … <VISAS>…</VISAS> <STRUCT><ARTICLE>…</ARTICLE></STRUCT>
+#+end_src
+
+The full =JORF= =texte/version= file carries the same fields under
+=META/META_COMMUN= (ID, ELI, NATURE) and =META_SPEC/META_TEXTE_CHRONICLE= (NUM,
+NOR, DATE_PUBLI, DATE_TEXTE) / =META_TEXTE_VERSION= (TITREFULL, MINISTERE), plus
+=SIGNATAIRES= (/observed/).
+
+*=NATURE= values seen* (/observed/, June to mid-October 2026, deduplicated by
+ID): =ARRETE= 5492, =DECRET= 1478, =AVIS= 1308, =DECISION= 944,
+=INFORMATIONS_PARLEMENTAIRES= 596, =ANNONCES= 146, =DELIBERATION= 36, =LISTE=
+33, =LOI= 32, =ARRET= 14, =RAPPORT= 13, =ORDONNANCE= 7, then rare ones
+(=RECOMMANDATION=, =ACCORD_FONCTION_PUBLIQUE=, =AVENANT=, =TABLEAU=, =REMISE=,
+=CITATION=, =EXEQUATUR=, =ACCORD=). A few records have an empty =NATURE=.
+
+*Légifrance link*
+
+- Use the text's own =ID_ELI= (official ELI permalink, /observed/ in the data),
+  e.g.
+  =https://www.legifrance.gouv.fr/eli/decret/2026/10/14/PRMX2627508D/jo/texte=.
+- The JO issue has its own ELI:
+  =https://www.legifrance.gouv.fr/eli/jo/2026/10/15/0241=.
+- The ID-based form =https://www.legifrance.gouv.fr/jorf/id/JORFTEXT…= is the
+  usual Légifrance permalink, but I could not load it (see 1.e and the
+  Unverified list).
+
+*What is excluded*
+
+The data leaves out sensitive individual measures: naturalisations,
+réintégrations, francisation and changes of name. It also leaves out the arrêts
+of the Cour de discipline budgétaire et financière ([[https://echanges.dila.gouv.fr/OPENDATA/JORF/DILA_JORF_Presentation_20170824.pdf][fiche]]; [[https://www.data.gouv.fr/datasets/jorf-les-donnees-de-l-edition-lois-et-decrets-du-journal-officiel/][data.gouv.fr]]). Other
+mesures nominatives and délégations de signature are included.
+
+** 1.b Légifrance API via PISTE
+*Catalogue and spec*
+
+- The API is "Légifrance", v2.4.2, REST, with "need_approval: No". The CGU file
+  is =CGU_Legifrance_API_VF_15-12-2022= ([[https://piste.gouv.fr/api-catalog-sandbox?filter=legifrance][PISTE catalogue]]).
+- The Swagger 2.0 spec is publicly viewable on the [[https://piste.gouv.fr/index.php?option=com_apiportal&view=apitester&usage=api&apitab=tests&apiName=L%C3%A9gifrance&apiId=7e5a0e1d-ffcc-40be-a405-a1a5c1afe950&managerId=3&type=rest&apiVersion=2.4.2&Itemid=179&swaggerVersion=2.0&lang=fr][PISTE API tester]]
+  (/observed/).
+- Base path: =/dila/legifrance/lf-engine-app=.
+- The data.gouv.fr service page lists access as "Restreint", free after sign-up
+  ([[https://www.data.gouv.fr/dataservices/legifrance][data.gouv.fr/dataservices/legifrance]]).
+
+*Hosts* ([[https://piste.gouv.fr/images/com_apiportal/documentation/UserGuide_navigation_FR.pdf][PISTE user guide §12.2]])
+
+|            | API                                 | Token                                                 |
+|------------+-------------------------------------+-------------------------------------------------------|
+| Sandbox    | =https://sandbox-api.piste.gouv.fr= | =https://sandbox-oauth.piste.gouv.fr/api/oauth/token= |
+| Production | =https://api.piste.gouv.fr=         | =https://oauth.piste.gouv.fr/api/oauth/token=         |
+
+The Swagger notes that sandbox data "ne sont pas identiques à celles de
+Production" and that the sandbox "peut être indisponible" (/observed/ in the
+Swagger =info.description=).
+
+*Sign-up steps* ([[https://piste.gouv.fr/images/com_apiportal/documentation/UserGuide_navigation_FR.pdf][user guide]], TOC §2, §5--7, §10)
+
+1. Create a piste.gouv.fr account.
+2. Accept the API CGU (§5).
+3. A SANDBOX application is created for you automatically (§6.1). Attach the
+   Légifrance API to it (§6.2).
+4. For production, create an application (§7.1), generate an OAuth ID
+   (client_id/secret, §7.5), and subscribe it to the Légifrance API (§10).
+5. Regenerate the secret about every 3 months (recommended, §7.6).
+
+*OAuth2 flow* ([[https://piste.gouv.fr/images/com_apiportal/documentation/UserGuide_navigation_FR.pdf][user guide §9, p. 29--31]])
+
+#+begin_example
+POST https://oauth.piste.gouv.fr/api/oauth/token
+Content-Type: application/x-www-form-urlencoded
+grant_type=client_credentials&client_id=…&client_secret=…&scope=openid
+→ {"access_token":"…","token_type":"Bearer","expires_in":3600,"scope":"openid"}
+#+end_example
+
+- Send =Authorization: Bearer <token>= on every call. The token lasts 3600 s.
+- PISTE follows RFC 6749.
+- /Observed/: both token URLs answer =400 invalid_client= to dummy credentials,
+  so they are live.
+
+*JO endpoints* (all =POST= with a JSON body; /observed/ in the Swagger)
+
+| Endpoint                   | Request body (Swagger def)                                                                                                                        | Returns                                                                                                                                                                                                                                                      |
+|----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| =/consult/lastNJo=         | =LastNElementRequest {nbElement}=                                                                                                                 | =GetJorfContResponse {containers[], totalNbResult}=: the last N JO containers                                                                                                                                                                                |
+| =/consult/jorfCont=        | =JorfContConsultRequest {id?, num?, date?, start{year,month,dayOfMonth}?, end?, searchText?, pageNumber, pageSize (max 100), highlightActivated}= | List of JO containers / sommaires. =FullConteneur.structure= is a =StructureTxt {liens[], tms[]}=, and each =LienTxt= has *=id, titre, nature, ministere, emetteur, autorite, etat, numSequence, ordre=*. That is everything a recap needs in a single call. |
+| =/consult/jorf=            | =JorfConsultRequest {textCid, searchedString?}=                                                                                                   | Full text: =nature, title, nor, ministere?/signers, dateParution, eli, articles[], …=                                                                                                                                                                        |
+| =/consult/getJoWithNor=    | ={nor}=                                                                                                                                           | Text by NOR                                                                                                                                                                                                                                                  |
+| =GET /misc/datesWithoutJo= | none                                                                                                                                              | Dates without a JO                                                                                                                                                                                                                                           |
+
+I did not find =/list/jo= in the spec. The =/list/*= controllers cover =bodmr=,
+=dossiersLegislatifs=, =loda=, =code=, =debatsParlementaires=,
+=questionsEcritesParlementaires= and similar (/observed/). The suggested flow is
+lastNJo → jorfCont → jorf, with =nbElement < 2500= and =jorf= preferred over
+=getJoWithNor= because not every text has a NOR. This comes from
+the [[https://www.legifrance.gouv.fr/contenu/pied-de-page/foire-aux-questions-api][Légifrance API FAQ]]. That page returned 403 to me, so the steps are taken
+from search-engine extracts (see Unverified).
+
+*Quotas*
+
+- The default per application is *20 requests/second*. Going over returns
+  HTTP 429. PISTE admins or the API provider can change it, or you can request a
+  change ([[https://piste.gouv.fr/images/com_apiportal/documentation/UserGuide_navigation_FR.pdf][user guide §7.7, p. 27]]).
+- The SANDBOX app is capped at *1,000,000 calls/day* ([[https://piste.gouv.fr/images/com_apiportal/documentation/UserGuide_navigation_FR.pdf][guide §6.4, p. 21]]).
+- Légifrance-specific quotas are shown only in the PISTE console ([[https://www.data.gouv.fr/dataservices/legifrance][data.gouv.fr]]).
+- A daily recap needs about 2 calls, so quotas are not a concern.
+
+*Terms of use*
+
+- The API is offered "sous
+  conditions": [[https://www.legifrance.gouv.fr/contenu/pied-de-page/open-data-et-api][www.legifrance.gouv.fr/contenu/pied-de-page/open-data-et-api]]
+  (linked from the Swagger).
+- The CGU PDF
+  is
+  [[https://www.legifrance.gouv.fr/contenu/Media/files/pied-de-page/cgu-legifrance-api-vf-15-12-2022_0.pdf][www.legifrance.gouv.fr/contenu/Media/files/pied-de-page/cgu-legifrance-api-vf-15-12-2022_0.pdf]].
+  I could not download it: the bot challenge served HTML instead.
+
+** 1.c Publication days and volumes
+- *6 editions a week* ([[https://echanges.dila.gouv.fr/OPENDATA/JORF/DILA_JORF_Presentation_20170824.pdf][DILA fiche]]).
+- /Observed/ over 115 JO dates from 2026-06-01 to 2026-10-15:
+  - Tuesday to Sunday only. There were *0 Mondays*.
+  - There was also *no JO on the day after a public holiday*: Wednesday
+    2026-07-15 (after 14 July) and Sunday 2026-08-16 (after 15 August).
+  - The listing likewise has no night increment on Mondays (e.g. 2026-10-05 and
+    2026-10-12 only have an evening file).
+  - The API exposes =GET /misc/datesWithoutJo= to get this list authoritatively.
+- *Texts per JO* (/observed/, open-data scope): min 36, *median 83*, max 182.
+- *Ordonnances per month* (/observed/, by =DATE_PUBLI=): June 3, July 4, August
+  0, September 0, October 1--15 0. *Lois*: 12 / 10 / 9 / 0 / 1. *Décrets*: 303 /
+  385 / 388 / 285 / 117 (half month).
+- So ordonnances are rare: 0--4 a month in this sample, bunched before the
+  summer break. "Typically" depends heavily on the parliamentary calendar, and
+  this is a sample of only 4.5 months.
+
+** 1.d Recommendation for v1: DILA =JORFSIMPLE= night increment
+- *Simplest.* It is an anonymous HTTPS GET on a directory listing. Pick the file
+  whose name starts =JORFSIMPLE_<today>-0= (00--03h stamp). Then =tar -xz= and
+  parse two kinds of XML. No OAuth, no token refresh, no quota and no account to
+  keep alive.
+- *On time.* Today's JO lands at 00:20--02:30 Paris, well before a 9h post. If
+  no =<today>-0…= file exists by 9h, it is a no-JO day (Monday or the day after
+  a holiday). Skip it.
+- *Complete for the purpose.* Each text carries nature, full title, ministry,
+  NOR, ELI link and number. The container gives JO order and section headings.
+- *No scraping.* It is an official bulk channel under Licence Ouverte.
+  Attribution text is required (DILA, file URL, file name and date).
+- *Caveats:*
+  - Node has no built-in tar reader. Use the system =tar= through =execFile=,
+    matching the repo's =execFile= convention, or a small dependency.
+  - Ignore the evening increment, or deduplicate by =ID=, because it re-delivers
+    the same texts.
+  - The API is better only for ad-hoc lookups or search, so keep it as phase 2
+    or fallback.
+
+** 1.e Légifrance website
+=https://www.legifrance.gouv.fr/…= returns *HTTP 403 with a "Just a moment..."
+bot-challenge page* to curl, WebFetch and a headless Firefox (/observed/ on
+=/jorf/id/…=, =/eli/…=, =/jorf/jo/…=). Scraping Légifrance HTML is not viable.
+The links are still fine for humans clicking them in Discord.
+
+* 2. Conseil des ministres compte rendu
+*Where it is published*
+
+1. *elysee.fr*. Pattern:
+   =https://www.elysee.fr/emmanuel-macron/YYYY/MM/DD/compte-rendu-du-conseil-des-ministres-du-<D>-<mois>-<YYYY>=.
+   Example: [[https://www.elysee.fr/emmanuel-macron/2026/10/14/compte-rendu-du-conseil-des-ministres-du-14-octobre-2026][14 Oct 2026]].
+   - The day is not zero-padded (=du-1-octobre-2026=).
+   - Older slugs include the weekday (=…-du-mercredi-22-decembre-2021=).
+   - Do not build the URL yourself. Take it from the feed.
+   - Plain curl gets HTTP 200 (/observed/).
+2. *info.gouv.fr*. Pattern:
+   =https://www.info.gouv.fr/conseil-des-ministres/compte-rendu-du-conseil-des-ministres-du-DD-MM-YYYY=.
+   Example: [[https://www.info.gouv.fr/conseil-des-ministres/compte-rendu-du-conseil-des-ministres-du-14-10-2026][14-10-2026]]. Listing: [[https://www.info.gouv.fr/conseil-des-ministres][www.info.gouv.fr/conseil-des-ministres]].
+   - Returns *HTTP 403 / bot challenge* to curl, WebFetch and =/rss=
+     (/observed/; robots.txt mentions Incapsula paths).
+   - It offers a weekly CM newsletter: [[https://www.info.gouv.fr/newsletter][www.info.gouv.fr/newsletter]].
+3. *vie-publique.fr*. It republishes each CM item as a separate "discours" entry
+   (see §3.c).
+
+*Machine-readable feed*
+
+- *Élysée RSS 2.0: [[https://www.elysee.fr/feed][www.elysee.fr/feed]]* (/observed/). It has 50 items mixing
+  every Élysée publication, and compte rendu items are titled =Compte rendu du
+  Conseil des ministres du …=.
+  - Example item: =<pubDate>Wed, 14 Oct 2026 15:10:00
+    +0000</pubDate><link>…/2026/10/14/compte-rendu-du-conseil-des-ministres-du-14-octobre-2026</link>=.
+  - The =<description>= is only a teaser, so fetch the page for the content.
+- Sitemaps are listed in [[https://www.elysee.fr/robots.txt][www.elysee.fr/robots.txt]] (e.g.
+  =sitemap.publication.xml=) and can serve as a backfill index.
+- I found no JSON or open-data API for the compte rendu itself. *You still have
+  to parse one HTML page, but there is no crawling.*
+
+*Timing* (/observed/ =og:article:published_time= and feed pubDate, Paris time)
+
+| Date        | Published at |
+|-------------+--------------|
+| 14 Oct 2026 | 17:10        |
+| 1 Oct 2026  | 17:50        |
+| 3 Jun 2026  | 16:50        |
+| 27 May 2026 | 15:05        |
+| 20 May 2026 | 16:55        |
+| 6 May 2026  | 22:55        |
+| 29 Apr 2026 | 18:20        |
+| 22 Apr 2026 | 17:20        |
+
+- The range is roughly mid-afternoon to late evening on CM day. It is reliably
+  in place by the next morning's 9h post.
+- The CM is usually on Wednesday, but not always: the 1 Oct 2026 council was on
+  a Thursday. The last three councils were 16 Sep, 1 Oct and 14 Oct 2026, so *do
+  not assume weekly*. Detect the item from the feed instead.
+
+*Page structure* (/observed/ on the 14 Oct 2026 elysee.fr page)
+
+- =<h1>Compte rendu du Conseil des ministres du 14 octobre 2026.</h1>=
+- Section =<h2>= in capitals: =PROJETS DE LOI=, =DECRET=, =MESURES D'ORDRE
+  INDIVIDUEL=.
+- One =<h3>= per item, e.g. =DISPOSITIONS RELATIVES AU SECTEUR NUCLEAIRE= or
+  =RATIFICATION DE L'ORDONNANCE DU 27 JUILLET 2026 …=.
+- Other councils also have =ORDONNANCE(S)=, =COMMUNICATION(S)= and similar
+  sections. Treat =<h2>= text as a free label, not an enum.
+- The article body is repeated in the HTML (modal or print copies), so take the
+  first occurrence only.
+
+*Verdict:* RSS for discovery plus one HTML page parse. Pure machine-readable
+data exists only through vie-publique (§3.c), and it lags.
+
+* 3. Later phase (brief)
+** 3.a Assemblée nationale open data
+- Portal: [[https://data.assemblee-nationale.fr/][data.assemblee-nationale.fr/]].
+- Dossiers législatifs for the 17th legislature: [[https://data.assemblee-nationale.fr/static/openData/repository/17/loi/dossiers_legislatifs/Dossiers_Legislatifs.json.zip][JSON zip]] and [[https://data.assemblee-nationale.fr/static/openData/repository/17/loi/dossiers_legislatifs/Dossiers_Legislatifs.xml.zip][XML zip]]. Both are
+  listed on [[https://data.assemblee-nationale.fr/travaux-parlementaires/dossiers-legislatifs][the dossiers page]].
+- Content: projets and propositions under examination, adopted texts, reports
+  and comptes rendus ([[https://data.assemblee-nationale.fr/travaux-parlementaires/dossiers-legislatifs][page]]).
+- It is a full-snapshot zip (10.9 MB). There is no delta.
+- *Freshness*: =Last-Modified: Thu, 15 Oct 2026 06:16:40 GMT= on 15 Oct, so it
+  looks *regenerated daily* (/observed/ on one day only).
+- Government bills would be the documents typed "projet de loi". I could not
+  inspect the zip, because the download was cut at 10 MiB in this environment
+  (see Unverified).
+
+** 3.b Sénat open data (DOSLEG)
+- [[https://data.senat.fr/dosleg/][data.senat.fr/dosleg/]]. Documents deposited at the Sénat since October 1977,
+  projets and propositions included.
+- Formats:
+  - Full PostgreSQL dump: [[https://data.senat.fr/data/dosleg/dosleg.zip][dosleg.zip]], 16 MB.
+  - CSV extracts: [[https://data.senat.fr/data/dosleg/dossiers-legislatifs.csv][dossiers-legislatifs.csv]], [[https://data.senat.fr/data/dosleg/promulguees.csv][promulguees.csv]], [[https://data.senat.fr/data/dosleg/ppl.csv][ppl.csv]] and others.
+- Licence: [[https://data.senat.fr/licence/][data.senat.fr/licence/]].
+- *Freshness*: =Last-Modified= 2026-10-15 01:23 GMT on both the zip and the CSV,
+  so it looks *regenerated nightly* (/observed/ on one day only). The page gives
+  no official schedule.
+
+** 3.c vie-publique.fr "Discours publics" metadata
+- Dataset: [[https://www.data.gouv.fr/datasets/discours-publics-metadonnees-de-vie-publique-fr][Métadonnées des Discours publics de Vie-publique.fr]], under Licence
+  Ouverte v2.0.
+- File: [[https://echanges.dila.gouv.fr/OPENDATA/DISCOURS_PUBLICS/vp_discours.json][echanges.dila.gouv.fr/OPENDATA/DISCOURS_PUBLICS/vp_discours.json]], about
+  242 MB as a single JSON array.
+- Docs: [[https://echanges.dila.gouv.fr/OPENDATA/DISCOURS_PUBLICS/][presentation PDF]] and the spec PDF in the same directory.
+- *Freshness*: rebuilt daily at about 06:00 Paris (=Last-Modified: Thu, 15 Oct
+  2026 04:00:18 GMT=, /observed/).
+- *Newest first*: the server supports =Accept-Ranges: bytes=, so a ~Range:
+  bytes=0-4000000~ request returned the last ~2 weeks (/observed/). That avoids
+  pulling 242 MB.
+- *Fields*: =id, titre, url, domaine, prononciation,
+  intervenants[{nom,qualite}], auteur_moral, circonstance, type_emetteur,
+  type_document, thematiques, descripteurs, mise_en_ligne, mise_a_jour=. It is
+  *metadata only, with no speech text* (/observed/).
+- *CM coverage*: it includes Conseil des ministres items split one per point,
+  with =type_emetteur: "Conseil des ministres"=. Example: "Conseil des ministres
+  du 1er octobre 2026. Mesures d'ordre individuel.", with =prononciation
+  2026-10-01= and =mise_en_ligne 2026-10-02=.
+- *Lag*: the 14 Oct 2026 council was not yet in the 15 Oct 06:00 file. Expect CM
+  items about *D+2 in the morning*, which is too late for a next-morning recap.
+  It is fine for a weekly digest.
+- About 3--16 entries a day are put online (/observed/, October 2026).
+- The DILA open-data index also has =RAPPORTS_PUBLICS/= and
+  =Protocole_du_Gouvernement/= ([[https://echanges.dila.gouv.fr/OPENDATA/][index]]), which I did not investigate.
+
+* Unverified / could not confirm
+- *Légifrance API FAQ*
+  ([[https://www.legifrance.gouv.fr/contenu/pied-de-page/foire-aux-questions-api][www.legifrance.gouv.fr/contenu/pied-de-page/foire-aux-questions-api]]) and the
+  *CGU PDF* both return 403 (bot challenge). The lastNJo → jorfCont → jorf flow,
+  the =nbElement < 2500= limit and the "jorf better than getJoWithNor" advice
+  come from search-engine extracts of that FAQ, not a direct read. The endpoints
+  and schemas themselves are confirmed in the Swagger.
+- *Légifrance-specific production quotas*. Only the PISTE defaults (20 req/s,
+  1M/day sandbox) are documented. Exact numbers are visible only in a logged-in
+  PISTE console.
+- *=client_credentials= on the Légifrance API specifically*. The Légifrance
+  Swagger declares only =implicit= and =accessCode= OAuth flows. The PISTE guide
+  documents =client_credentials= as the way to get a production token for PISTE
+  APIs in general. I could not test an authenticated call without an account.
+- *Live response shape of =/consult/jorfCont=*, including whether
+  =structure.liens= is filled at the top level or nested under =tms=. I have it
+  from the Swagger only, with no authenticated call.
+- *=https://www.legifrance.gouv.fr/jorf/id/JORFTEXT…= permalink*. It is the
+  widely used form but returned 403 to automated clients. =ID_ELI= links come
+  from the data itself.
+- *Time the JO goes live on Légifrance* relative to the DILA night increment. I
+  did not find an official statement. data.gouv.fr only says texts reach
+  Légifrance "within 24 hours of publication".
+- *Whether an evening increment ever carries a text absent from that morning's
+  night file.* I checked one day (14 Oct 2026): 49 out of 49 were re-deliveries.
+- *Ordonnances per month over a longer period.* The sample is June to
+  mid-October 2026 only.
+- *info.gouv.fr RSS feed URL.* The footer reportedly links one, but the site
+  blocks automated clients (403), so I could not locate or test it.
+- *Assemblée nationale zip internals* (how a projet de loi is typed, field
+  names). The download was truncated at 10 MiB in this environment, so I did not
+  inspect it.
+- *Official refresh schedules* for the AN and Sénat dumps. Daily is inferred
+  from one =Last-Modified= observation each.
+- *vie-publique domain move* to =vie-publique.gouv.fr= (mentioned in search
+  results). Not checked. =www.vie-publique.fr= still answered 200 on 2026-10-15.

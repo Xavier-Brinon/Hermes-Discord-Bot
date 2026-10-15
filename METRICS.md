@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-10-05T10:17:44Z
-source_count: 45
+timestamp: 2026-10-15T13:11:21Z
+source_count: 46
 ---
 
 # Metrics — @YackShavingSkill
@@ -63,15 +63,16 @@ they do not represent current drift. Canonical definition:
 | test-pure-helpers | COMPLEX | PASS | 100% |
 | timeout-web-aware | STANDARD | PASS | 100% |
 | unique-thread-titles | STANDARD | PASS | 100% |
+| veille-adr | TRIVIAL | PASS | 100% |
 | watchdog-restart-reset | STANDARD | PASS | 100% |
 | youtube-transcript | COMPLEX | PASS | 47% |
 
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 45 |
+| Total tasks | 46 |
 | PASS rate (Reflex) | 100% |
-| Mean Scope Adherence | 96.3% |
+| Mean Scope Adherence | 96.4% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -128,3 +129,4 @@ they do not represent current drift. Canonical definition:
 | 2026-10-03T09:26:28Z | glossary-org | 100% |
 | 2026-10-05T09:54:37Z | docs-single-instance | 100% |
 | 2026-10-05T10:17:09Z | hermes-call-timing | 100% |
+| 2026-10-15T12:00:00Z | veille-adr | 100% |

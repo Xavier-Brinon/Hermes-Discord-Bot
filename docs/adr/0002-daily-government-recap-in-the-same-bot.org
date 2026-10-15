@@ -1,0 +1,43 @@
+#+title: Daily government recap lives in the same bot
+#+date: 2026-10-15
+#+status: proposed
+#+issue: b982ce8
+#+options: toc:nil num:nil ^:{}
+#+startup: showall indent
+
+The daily recap of French government activity ("veille gouvernementale") is a
+fourth flow of the existing bot, not a second bot. A timer inside the bot's
+process posts one recap a day around 9h (Paris) in #laidé-bas-📢 (channel
+550408292820582430). A second bot would need its own Discord application and
+token, its own PM2 process and dotenvx secrets, and a copy of the Hermes =-Q=
+wrapper and its parser. It would also break the rule that the bot runs as
+exactly one process. The existing bot already has the Discord connection, the
+Hermes wrapper and the deploy harness.
+
+The data is fetched by code from official open data, and Hermes only writes the
+French text from the facts it is given. It never browses government sites
+(Légifrance and info.gouv.fr block bots, and the web toolset is unreliable).
+Sources and their access details are in [[file:../research/french-gov-activity-sources.org][the research note]].
+
+* Consequences
+- *v1 sources:* the day's Journal officiel from DILA's =JORFSIMPLE= night file
+  (anonymous, no token), filtered to ordonnances, lois and décrets. Routine
+  arrêtés and individual nominations are dropped. The Conseil des ministres
+  compte rendu comes from the Élysée RSS feed plus its compte-rendu page.
+- *One post a day, at 9h.* The recap on day D covers the Journal officiel of D
+  plus any Conseil des ministres published since the previous recap. The Conseil
+  usually comes out around 17h, so a Wednesday Conseil appears in Thursday's
+  recap.
+- *Quiet days:* when nothing is left after filtering, across all sources, the
+  bot stays silent. Wednesday is the exception: it posts one short French
+  sentence with a mild joke that the government has done nothing worth
+  reporting. Hermes writes it each time, with no named individuals.
+- *Factual only:* every item links to its official source. No commentary on the
+  government's positions.
+- *No Journal officiel on Mondays,* so Mondays are usually silent.
+- *Restarts:* the date of the last posted recap is kept on disk next to the
+  existing caches. A PM2 restart or container recreate neither posts twice nor
+  skips a day.
+- *Later phases, out of scope for v1:* an evening Conseil des ministres post,
+  the Légifrance API (PISTE), Assemblée nationale and Sénat bills,
+  vie-publique.fr speeches.
