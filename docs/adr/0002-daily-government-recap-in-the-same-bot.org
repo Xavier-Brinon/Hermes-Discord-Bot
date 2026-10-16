@@ -1,6 +1,6 @@
 #+title: Daily government recap lives in the same bot
 #+date: 2026-10-15
-#+status: proposed
+#+status: accepted
 #+issue: b982ce8
 #+options: toc:nil num:nil ^:{}
 #+startup: showall indent

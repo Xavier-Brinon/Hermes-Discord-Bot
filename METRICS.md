@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-10-15T13:11:21Z
-source_count: 46
+timestamp: 2026-10-16T12:55:56Z
+source_count: 47
 ---
 
 # Metrics — @YackShavingSkill
@@ -36,6 +36,7 @@ they do not represent current drift. Canonical definition:
 | hermes-call-timing | STANDARD | PASS | 100% |
 | hermes-profile | STANDARD | PASS | 39% |
 | hermes-quiet-parse | STANDARD | PASS | 100% |
+| jorf-night-file | STANDARD | PASS | 100% |
 | log-hermes-bin | TRIVIAL | PASS | 100% |
 | max-turns-cap | STANDARD | PASS | 100% |
 | mention-gate | STANDARD | PASS | 100% |
@@ -70,7 +71,7 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 46 |
+| Total tasks | 47 |
 | PASS rate (Reflex) | 100% |
 | Mean Scope Adherence | 96.4% |
 
@@ -130,3 +131,4 @@ they do not represent current drift. Canonical definition:
 | 2026-10-05T09:54:37Z | docs-single-instance | 100% |
 | 2026-10-05T10:17:09Z | hermes-call-timing | 100% |
 | 2026-10-15T12:00:00Z | veille-adr | 100% |
+| 2026-10-16T13:00:00Z | jorf-night-file | 100% |

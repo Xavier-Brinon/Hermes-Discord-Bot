@@ -1475,3 +1475,51 @@ PASSED. `formatTimingLine` + `startTiming` in hermes-cli.js, one `logTiming` per
 ### Residual risk carried to handover
 - The read-out only covers what `pm2 logs --lines 5000` still holds; older calls fall out with log rotation.
 - A link summary's elapsed time excludes the yt-dlp transcript fetch that runs before it (TIMEOUT_TRANSCRIPT, separate budget).
+
+# Task: jorf-night-file
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One module `jorf.js` of small pure functions (Paris date, night-file pick from the DILA listing, header-only field read, NUM-based filter, attribution) plus two thin I/O functions: system `tar` via execFile and global `fetch`. I will NOT add an XML or tar dependency, a retry loop, config entries, or any wiring into the bot.
+- **Scope Boundaries:**
+  - In-scope: `jorf.js`, `test/jorf.test.js`, `test/fixtures/jorf/JORFSIMPLE_20261010-002617.tar.gz`, `docs/adr/0002-daily-government-recap-in-the-same-bot.org` (status → accepted)
+  - Out-of-scope: `hermes-discord-bot-clean.js` (2b330be), `prompts.js` (b51086a), `config.js`, `docs/research/french-gov-activity-sources.org`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/minimal-scaffold.md`: a new module boundary with the smallest seed. In-repo shape: `youtube.js` (execFile, temp dir, cleanup in `finally`).
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md`: no parser library, no scheduler, no config surface ahead of need.
+
+### Assumptions
+`.artifacts/jorf-night-file/pre_computation_block.md`
+
+*(6 assumptions, 4 HIGH with verifications: `-0` stamp = night file; no night file = no JO; unnumbered décret = individual measure, the ADR's rule over the issue's literal "keep every DECRET"; no axios usage. MEDIUM: `(rectificatif)` suffix; tar + ICU in the prod image.)*
+
+### Line-Count Budget
+200 logical lines (module 100, tests 100).
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED, with one process deviation. The module matches the commitment: pure helpers + `readNightFile` + `fetchJorfFacts`, no new dependency, nothing wired. Deviation: this Pre-Flight was written after the data exploration and the first draft, not before coding, because the filter rule could only be settled by reading real night files. The draft did not change scope; the data changed two decisions, both recorded: (1) DECRET is kept only when numbered (49 unnumbered individual measures over 9 days); (2) a missing file returns `{ facts: [], attribution: null }` per the AC, not null.
+
+### Violation Checklist
+- [ ] **Complexity Creep**: 229 vs 200 (+14.5%), under the +25% threshold.
+- [ ] **Scope Bleed**: none; 4 declared files.
+- [ ] **Style Drift**: none; header comment + issue tag, emoji-led English console.log, French only in the Discord-bound attribution string.
+- [ ] **Issue Lifecycle**: PENDING, lands at merge.
+
+### Verification Results
+`.artifacts/jorf-night-file/verification_matrix.md`
+
+11 PASS, 2 PENDING. Suite 152/152 (+12). Live fetch on 2026-10-16: 1 fact (décret 2026-959), Monday 2026-10-12: empty.
+
+### Residual risk carried to handover
+- `tar` and `Intl` with `Europe/Paris` are unverified in the node:22 prod image until 2b330be wires the flow in.
+- The `(rectificatif)` marker rests on 2 occurrences in 9 days.
+- An ordonnance has not been seen in the sample (0 since July); it goes through the same NUM rule as a loi.
