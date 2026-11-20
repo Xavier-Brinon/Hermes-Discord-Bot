@@ -1,0 +1,280 @@
+# Hermes Discord Bot — Le Mistral Bot
+
+French-language Discord bot powered by Hermes Agent. Answers @mentions in French in the configured channel.
+
+## Current status
+
+- **Bot name**: Le Mistral Bot#9470
+- **Status**: ✅ Online (PM2)
+- **Framework**: Node.js + discord.js v14
+- **Security**: Token encrypted via dotenvx
+
+## Project structure
+
+```
+/data/workspace/
+├── hermes-discord-bot-clean.js   # Main bot code
+├── manage_hermes.sh              # Canonical management script (start/stop/restart/status/logs)
+├── test-token.js                 # Discord token test utility
+├── package.json                  # npm configuration
+├── .env                          # Encrypted variables (dotenvx)
+├── .env.keys                     # Decryption keys (⚠️ do not commit)
+└── node_modules/                 # Dependencies
+```
+
+## Managing the bot
+
+All operations go through `manage_hermes.sh`:
+
+```bash
+./manage_hermes.sh start      # Start the bot
+./manage_hermes.sh stop       # Stop the bot
+./manage_hermes.sh restart    # Restart the bot
+./manage_hermes.sh status     # Show status
+./manage_hermes.sh logs       # Show logs
+```
+
+npm equivalents:
+
+```bash
+npm run pm2:start
+npm run pm2:stop
+npm run pm2:restart
+npm run pm2:status
+npm run pm2:logs
+```
+
+## Redeployment (updating the code)
+
+⚠️ `restart` **does not update the code** — it relaunches PM2 on the file already
+present on disk. A fix merged into `main` only becomes active on the VPS after
+this redeployment. (Merged fix ≠ fix in production.)
+
+The code reaches the VPS via `git pull` from the GitHub mirror (`origin`).
+Full procedure, to run **on the VPS**:
+
+```bash
+cd /data/workspace
+
+# 1. Fetch the new code
+git pull origin main
+
+# 2. (Only if package.json / package-lock.json changed) reinstall
+npm install
+
+# 3. Relaunch PM2 so it re-reads the file
+./manage_hermes.sh restart
+
+# 4. Verify the deployment
+./manage_hermes.sh status     # should show "online"
+git log -1 --oneline          # should show the expected commit
+./manage_hermes.sh logs       # watch startup (Ctrl-C to exit)
+```
+
+Finally, a **responsiveness test**: mention @Le Mistral Bot in Discord and
+confirm a reply in French.
+
+### Watch points
+
+- **Secrets**: the bot decrypts `.env` itself at startup; never wrap PM2 in
+  `npx dotenvx run`. `.env.keys` must be present on the VPS,
+  otherwise the bot stops at startup with `MISSING_PRIVATE_KEY`.
+- **Restarts**: PM2 auto-restarts the bot on crash. A climbing `↺` count in
+  `./manage_hermes.sh status` means a crash loop — watch the logs right after a
+  redeployment.
+- **Exactly one instance**: the bot holds a single Discord gateway connection,
+  so every running copy logs in and answers each message again. Never start it
+  in PM2 cluster mode (`-i`), never `pm2 start` it a second time, and don't move
+  it to a multi-worker runtime (e.g. Platformatic Watt). The bot spends its time
+  waiting on Hermes, not on CPU, so extra workers would gain nothing anyway. A
+  bot that outgrows one process needs Discord sharding, not workers.
+- **One-way street**: the VPS _pulls_ the code (`git pull`); we never push to
+  `/data/workspace`. The canonical source stays Radicle + `origin`.
+
+### Rollback
+
+```bash
+cd /data/workspace
+git log --oneline -5          # find the previous commit
+git reset --hard <sha>        # go back to the stable commit
+./manage_hermes.sh restart
+```
+
+## After a reboot
+
+The bot runs in a **managed Docker sandbox**. A container restart or recreate
+kills every process — PM2 included — and re-runs the platform entrypoint
+(`tini -- /app/u4s-hermes-agent`), which starts a Hermes gateway
+(`hermes gateway run`, with `HERMES_HOME=/data`) but not the bot.
+
+The bot rides on that gateway: a **gateway hook** in `/data/hooks/` runs
+`./manage_hermes.sh start` on the gateway's `gateway:startup` event (issue
+1ce88f5). Install it once — it lives on the persistent `/data` volume and points
+at the repo copy, so `git pull` keeps it current:
+
+```bash
+cd /data/workspace
+./manage_hermes.sh install-hook
+```
+
+Each automatic start is logged to `/data/workspace/.autostart.log`. If the bot is
+still down after a restart, start it by hand — `start` is idempotent, so it is
+always safe to run:
+
+```bash
+cd /data/workspace
+./manage_hermes.sh start
+```
+
+Everything the bot needs (code, `node_modules`, `.env`, `.env.keys`) lives on the
+persistent `/data` volume, so `start` works immediately on a fresh container.
+
+> **Two Hermes homes.** The platform gateway and the bot both use
+> `HERMES_HOME=/data` — the gateway from the platform's environment, the bot from
+> its own encrypted `.env` (profile at `/data/profiles/discord-bot`). Your
+> interactive shell sets no `HERMES_HOME`, so the `hermes` CLI there uses
+> `~/.hermes` = `/data/.hermes`. Gateway hooks therefore go in `/data/hooks`, not
+> `/data/.hermes/hooks`; to inspect the gateway's config from the shell, prefix
+> `HERMES_HOME=/data`. The hook strips every inherited `HERMES_*` variable before
+> starting the bot: dotenvx does not override variables that are already set, so
+> this lets `.env` decide, and keeps the platform's web-UI password out of the bot.
+
+## Automatic recovery
+
+- **Bot crash, container alive:** PM2 restarts the process automatically — no
+  action needed. This is the common case.
+- **Container restart or recreate:** automatic via the gateway hook (above), once
+  `install-hook` has been run.
+
+There is deliberately **no bash watchdog**. The former `hermes_watchdog.sh`
+duplicated PM2's own crash-restart, ran unsupervised (nothing restarted it if it
+died), and could not survive a container recreate — so it was retired.
+`manage_hermes.sh` keeps PM2's saved process list current via `pm2 save` on every
+start/restart.
+
+## Switching the Hermes version
+
+The bot runs whichever binary `HERMES_BIN` names, with the profile `HERMES_PROFILE`
+names (defaults: `/data/.local/bin/hermes` and `discord-bot`). A new Hermes version
+usually needs its own profile: 0.21 fails every call on the `discord-bot` profile,
+whose `agent.reasoning_effort: max` Mistral rejects (issue 1ae5380). So a cutover
+changes both variables, and a rollback removes both.
+
+Set them in the encrypted `.env`, never in the shell: the gateway hook strips every
+inherited `HERMES_*` variable before it starts the bot.
+
+**Cutover** (example: 0.21 with the fixed clone profile):
+
+```bash
+cd /data/workspace
+npx dotenvx set HERMES_BIN /opt/venv/bin/hermes
+npx dotenvx set HERMES_PROFILE discord-bot-021
+rm -f .session_cache.json   # sessions live in each profile's own state.db
+./manage_hermes.sh restart
+```
+
+**Rollback:**
+
+```bash
+cd /data/workspace
+npx dotenvx set HERMES_BIN /data/.local/bin/hermes
+npx dotenvx set HERMES_PROFILE discord-bot
+rm -f .session_cache.json
+./manage_hermes.sh restart
+```
+
+Clearing `.session_cache.json` means a reply to an answer from before the switch
+starts a fresh conversation, not an error. Test a profile before switching with
+`npx dotenvx run -f .env -- <bin> -p <profile> chat -q "Dis bonjour." -Q --source tool`.
+
+> **Rolling back to 0.16 now takes two more steps.** The parser no longer strips
+> 0.16's `📄 Reading …` trace lines (issue 346c1cf), so revert that commit first,
+> or those lines end up at the top of 📝 summaries. The `discord-bot` profile's
+> `SOUL.md` also still has the "📌 Résumé / ❓ Questions" rule that was removed
+> from the 0.21 profile (issue 8f33078); delete that line too.
+
+## Health check
+
+**Online is not the same as answering.** The bot shows as online in Discord as soon as it
+logs in, and Hermes plays no part in that. If every Hermes call fails, the bot stays green
+and replies with its French error message. Only an **@mention in Discord** proves the whole
+chain works.
+
+From the VPS, in order of cost:
+
+1. **Which Hermes the bot runs.** The bot logs it at every start (issue 9afaeac):
+
+   ```bash
+   npx pm2 logs hermes-discord-bot --lines 50 --nostream | grep '🔌'
+   # 🔌 Hermes CLI: /opt/venv/bin/hermes — Hermes Agent v0.21.4 … — profil discord-bot-021
+   ```
+
+   The line appears a second or two after a restart. `❌ Hermes CLI introuvable` means the
+   binary is missing; the admin also gets a DM.
+
+2. **Ask Hermes exactly as the bot does.** `HERMES_BIN` and `HERMES_PROFILE` live in the
+   encrypted `.env`, so read them from there instead of typing them:
+
+   ```bash
+   cd /data/workspace
+   npx dotenvx run -f .env -- sh -c '"$HERMES_BIN" -p "$HERMES_PROFILE" chat -q "Dis bonjour." -Q --source tool'
+   ```
+
+   A French greeting means the model, the key and the profile all work. For a full diagnosis,
+   replace `chat -q … --source tool` with `doctor`. Don't follow doctor's `--fix` or
+   `hermes setup` advice on the live profile: it rewrites the profile's config.
+
+3. **@mention the bot in Discord.** This is the definitive check.
+
+**Why not just run `hermes` in the shell.** The bot's configuration comes from five things:
+`HERMES_BIN`, `HERMES_HOME`, the profile, the environment dotenvx injects, and the working
+directory. A bare `hermes` in an interactive shell gets at most three of them right. It
+resolves to the platform install (`/opt/venv/bin/hermes`) whatever the bot uses, it uses
+`/data/.hermes` rather than the bot's home, and it sees none of the bot's keys. On
+2026-08-13 a bare `hermes doctor` reported every key missing for that reason alone. There
+are two installs on the VPS: the platform's `/opt/venv/bin/hermes` and the older pip one
+at `/data/.local/bin/hermes`. The 🔌 startup line is the way to see which one the running
+process uses: `HERMES_BIN` and `HERMES_PROFILE` come from `.env`, decrypted inside the bot, so
+`npx pm2 env` no longer shows them (it shows only the launch environment).
+
+**Slow, not broken.** PM2's `↺` count only shows crashes. Every Hermes call also logs one
+line (issue 6b61611):
+
+```
+⏱️ hermes flow=link web=yes outcome=ok elapsed=62.3s limit=150s
+```
+
+`flow` is `ask`, `resume`, `recap` or `link`. `outcome` is `ok`, `error`, `timeout` or
+`abstain` (a 📝 link the bot declined to summarise). To get per-flow percentiles from the
+recent logs:
+
+```bash
+npx pm2 logs hermes-discord-bot --lines 5000 --nostream | grep -o 'flow=.*' \
+  | awk '{ split($1,f,"="); split($2,w,"="); split($3,o,"="); split($4,e,"=");
+           print f[2] "/" w[2], e[2] + 0, o[2] }' \
+  | sort -k1,1 -k2,2n \
+  | awk 'function rank(p, c,  i) { i = int(p * c); if (i < p * c) i++; return i < 1 ? 1 : i }
+         { k = $1; v[k, ++n[k]] = $2; if ($3 == "timeout") t[k]++ }
+         END { for (k in n) printf "%-11s n=%-4d p50=%6.1fs p95=%6.1fs max=%6.1fs timeouts=%d\n",
+                 k, n[k], v[k, rank(.5, n[k])], v[k, rank(.95, n[k])], v[k, n[k]], t[k] }' \
+  | sort
+# link/yes    n=3    p50=  88.4s p95= 150.0s max= 150.0s timeouts=1
+```
+
+A p95 creeping toward the flow's `limit` warns of timeouts before members see them.
+
+## Troubleshooting
+
+| Problem                            | Check                                                  |
+| ---------------------------------- | ------------------------------------------------------ |
+| Bot does not respond               | `./manage_hermes.sh status`, then §Health check        |
+| Token error                        | `node test-token.js` (never prints the token)          |
+| Bot down after a container restart | `tail .autostart.log`, then `./manage_hermes.sh start` |
+| PM2 corrupted                      | `npx pm2 kill && ./manage_hermes.sh start`             |
+
+## Maintenance
+
+- **Logs**: `./manage_hermes.sh logs`
+- **Update dependencies**: `npm update`
+- **Secret scan before push** (once per clone, needs mise): `git config core.hooksPath ops/git-hooks`. The hook runs gitleaks over the full history and blocks the push on a finding.
+- **Responsiveness test**: Mention @Le Mistral Bot in Discord

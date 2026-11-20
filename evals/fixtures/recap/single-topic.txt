@@ -1,0 +1,8 @@
+[2026-05-10 | alice] On lance le sprint de refactorisation du bot cette semaine.
+[2026-05-10 | bob] Première étape : sortir les prompts dans un module testable.
+[2026-05-10 | claire] Et extraire le parseur de sortie Hermes, il est dupliqué.
+[2026-05-11 | david] J'ai ouvert les issues Radicle pour chaque morceau du refactor.
+[2026-05-11 | alice] Parfait. On garde des commits surgicaux, un concern par patch.
+[2026-05-12 | bob] Tests unitaires d'abord sur unwrapText et splitAtBoundaries.
+[2026-05-12 | claire] Puis modularisation du gros fichier en config/hermes/text/recap.
+[2026-05-13 | david] Objectif : que chaque module soit testable isolément.

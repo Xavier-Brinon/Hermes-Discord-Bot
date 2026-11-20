@@ -1,0 +1,43 @@
+{
+  "name": "hermes-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot powered by Hermes Agent — French-language assistant",
+  "main": "hermes-discord-bot-clean.js",
+  "scripts": {
+    "start": "node hermes-discord-bot-clean.js",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "eval:recap": "node evals/run-recap-eval.js",
+    "pm2:start": "npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",
+    "pm2:stop": "npx pm2 stop hermes-discord-bot",
+    "pm2:restart": "npx pm2 stop hermes-discord-bot 2>/dev/null || true; npx pm2 delete hermes-discord-bot 2>/dev/null || true; npx pm2 start hermes-discord-bot-clean.js --name hermes-discord-bot",
+    "pm2:status": "npx pm2 list",
+    "pm2:logs": "npx pm2 logs hermes-discord-bot"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "hermes",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.71.3",
+    "axios": "^1.18.0",
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.3.1",
+    "pm2": "^7.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4"
+  }
+}

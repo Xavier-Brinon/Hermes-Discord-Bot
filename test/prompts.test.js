@@ -1,0 +1,406 @@
+'use strict';
+
+// Deterministic tests — no Hermes, no Discord. Two jobs:
+//   1. byte-identity guard: the builders must equal the strings the bot used to
+//      send inline, so extraction caused no behaviour change (and future edits
+//      are caught here, not in production).
+//   2. parser contract: extractThemes must behave exactly like the old inline loop.
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  LINK_UNREADABLE_SENTINEL,
+  buildAskPrompt,
+  buildAskPromptWithContextFile,
+  buildLinkPrompt,
+  buildSummaryFormat,
+  splitQuestions,
+  titleFromSummary,
+  questionFrom,
+  buildQuestionReply,
+  QUESTION_PREFIX,
+  buildRecapPrompt,
+  extractThemes,
+  parseHermesOutput,
+  MAX_ITERATIONS_NOTICE,
+} = require('../prompts');
+
+test('buildAskPrompt — no context — byte-identical to former inline literal', () => {
+  const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
+  assert.equal(buildAskPrompt('Quel temps fait-il ?', null), expected);
+});
+
+test('buildAskPrompt — with context — prepends "Contexte :" + blank line', () => {
+  const expected = `Contexte : dernier article: http://x\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : et alors ?`;
+  assert.equal(buildAskPrompt('et alors ?', 'dernier article: http://x'), expected);
+});
+
+test('buildAskPromptWithContextFile — byte-identical literal with @file: ref', () => {
+  const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Résume le canal\n\nLe contexte de la conversation est fourni en pièce jointe. @file:.hermes-recap-ctx-1.txt`;
+  assert.equal(
+    buildAskPromptWithContextFile('Résume le canal', '.hermes-recap-ctx-1.txt'),
+    expected
+  );
+});
+
+test('buildAskPromptWithContextFile — @file: token is preceded by whitespace (so Hermes parses it)', () => {
+  // context_references REFERENCE_PATTERN requires (?<![\w/]) before @ — a space qualifies.
+  const out = buildAskPromptWithContextFile('Q', 'ctx.txt');
+  assert.match(out, / @file:ctx\.txt$/);
+});
+
+test('buildLinkPrompt — no meta: summary format + title-free abstain clause (issue de52e4a)', () => {
+  const expected = `Résume en français le contenu de ce lien : http://x.
+Contexte : un test.
+Si tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, etc.), n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien d'autre.
+${buildSummaryFormat()}`;
+  assert.equal(buildLinkPrompt('http://x', 'un test'), expected);
+});
+
+test('buildLinkPrompt — empty context falls back to "aucun"', () => {
+  assert.match(buildLinkPrompt('http://x', ''), /Contexte : aucun\./);
+});
+
+test('buildLinkPrompt — embeds the shared buildSummaryFormat()', () => {
+  assert.ok(buildLinkPrompt('http://x', 'ctx').includes(buildSummaryFormat()));
+});
+
+// --- buildLinkPrompt no-embed abstain (issue de52e4a) ----------------------
+
+test('buildLinkPrompt — no meta grants the abstain sentinel (no-embed links can abstain)', () => {
+  const prompt = buildLinkPrompt('http://x', 'ctx');
+  // a no-embed 📝-reacted link may now abstain instead of fabricating a summary
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL), 'no-embed path must permit abstention');
+  assert.match(prompt, /Si tu ne peux pas accéder au contenu réel/);
+  // nothing to match against → no identity / VÉRIFICATION language (would risk false abstentions)
+  assert.doesNotMatch(prompt, /VÉRIFICATION OBLIGATOIRE/);
+  assert.doesNotMatch(prompt, /identifié/);
+  // a readable article is still summarised — the shared summary format stays present
+  assert.ok(prompt.includes(buildSummaryFormat()));
+});
+
+// --- buildLinkPrompt with the embed anchor (issue 1b94451) -----------------
+
+test('buildLinkPrompt — meta=null is byte-identical to no meta (behaviour unchanged)', () => {
+  assert.equal(buildLinkPrompt('http://x', 'ctx', null), buildLinkPrompt('http://x', 'ctx'));
+});
+
+test('buildLinkPrompt — with meta, anchors on title/author/provider + the abstain sentinel', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'aucun', {
+    title: 'Et si les fées existaient vraiment ?',
+    author: 'FLORIEGRAPHIE',
+    provider: 'YouTube',
+  });
+  assert.match(prompt, /Et si les fées existaient vraiment \?/);
+  assert.match(prompt, /FLORIEGRAPHIE/);
+  assert.match(prompt, /YouTube/);
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL), 'must instruct the sentinel');
+  assert.match(prompt, /VÉRIFICATION OBLIGATOIRE/);
+  // still carries the shared summary format
+  assert.ok(prompt.includes(buildSummaryFormat()));
+});
+
+test('buildLinkPrompt — meta with only a title omits the author/provider clauses', () => {
+  const prompt = buildLinkPrompt('http://x', 'ctx', { title: 'Titre seul' });
+  assert.match(prompt, /« Titre seul »/);
+  assert.doesNotMatch(prompt, /auteur\/chaîne/);
+  assert.ok(prompt.includes(LINK_UNREADABLE_SENTINEL));
+});
+
+// --- buildLinkPrompt with a transcript (issue 7801304) ---------------------
+
+// The regression guard for the whole feature: everything that does not supply a transcript
+// must keep producing the pre-feature prompt, byte for byte, on BOTH the meta and no-meta
+// branches. If this pair ever diverges, every non-YouTube summary has silently changed.
+test('buildLinkPrompt — omitting transcript is byte-identical to transcript=null', () => {
+  const meta = { title: 'Titre', author: 'Chaîne', provider: 'YouTube' };
+  assert.equal(buildLinkPrompt('http://x', 'ctx'), buildLinkPrompt('http://x', 'ctx', null, null));
+  assert.equal(
+    buildLinkPrompt('http://x', 'ctx', meta),
+    buildLinkPrompt('http://x', 'ctx', meta, null)
+  );
+});
+
+test('buildLinkPrompt — a transcript is embedded and marked as the source of truth', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.ok(prompt.includes('le contenu parlé'));
+  assert.match(prompt, /TRANSCRIPTION DE LA VIDÉO/);
+  assert.match(prompt, /source de vérité/);
+});
+
+// Without this instruction Hermes fetches the unreadable watch page, concludes it cannot
+// reach the content, and abstains while holding the transcript.
+test('buildLinkPrompt — a transcript suppresses the abstain sentinel', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.match(prompt, new RegExp(`n'utilise PAS ${LINK_UNREADABLE_SENTINEL}`));
+});
+
+test('buildLinkPrompt — a transcript asks for a reformulation, not a copy', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', null, 'le contenu parlé');
+  assert.match(prompt, /Reformule les idées avec tes propres mots/);
+});
+
+test('buildLinkPrompt — transcript and meta anchors coexist', () => {
+  const prompt = buildLinkPrompt('https://youtu.be/abc', 'ctx', { title: 'Ma vidéo' }, 'parlé');
+  assert.match(prompt, /« Ma vidéo »/); // embed anchor survives
+  assert.match(prompt, /TRANSCRIPTION DE LA VIDÉO/); // transcript anchor added
+  assert.ok(prompt.includes(buildSummaryFormat()));
+});
+
+test('buildLinkPrompt — an empty-string transcript behaves as no transcript', () => {
+  assert.equal(buildLinkPrompt('http://x', 'ctx', null, ''), buildLinkPrompt('http://x', 'ctx'));
+});
+
+test('buildSummaryFormat — carries the adaptive markers the evals key off', () => {
+  const f = buildSummaryFormat();
+  // hasLinkStructure (evals/assertions.js) matches these — keep in sync.
+  assert.match(f, /\*\*Thèse centrale\*\* \(ou \*\*Idée principale\*\*/);
+  assert.match(f, /\*\*Arguments clés\*\* \(ou \*\*Points clés\*\*/);
+  assert.match(f, /\*\*Questions\*\*/);
+});
+
+test('buildAskPrompt — summarize=false is byte-identical to plain Q&A (no format leak)', () => {
+  const expected = `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : Quel temps fait-il ?`;
+  assert.equal(buildAskPrompt('Quel temps fait-il ?', null, false), expected);
+  // omitting the 3rd arg must behave the same (default false)
+  assert.equal(buildAskPrompt('Quel temps fait-il ?', null), expected);
+});
+
+test('buildAskPrompt — summarize=true appends the shared summary format', () => {
+  const out = buildAskPrompt('Résume ceci', 'Lien: http://x', true);
+  assert.ok(out.startsWith('Contexte : Lien: http://x'));
+  assert.ok(out.endsWith(`\n\n${buildSummaryFormat()}`));
+});
+
+test('buildRecapPrompt — byte-identical and keeps the THEME: contract', () => {
+  const expected =
+    `Voici tous les messages récents de ce canal. ` +
+    `Identifie les thèmes principaux (3 à 5 max) et liste-les simplement. ` +
+    `⚠️ FORMAT OBLIGATOIRE — réponds EXACTEMENT comme ceci, une ligne par thème :\n\n` +
+    `THEME: Nom du thème 1\nTHEME: Nom du thème 2\nTHEME: Nom du thème 3\n\n` +
+    `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`;
+  assert.equal(buildRecapPrompt(), expected);
+});
+
+test('extractThemes — parses THEME: lines, case-insensitive, trims', () => {
+  const out = 'THEME: Déploiement VPS\ntheme:  Bug du recap \nTHEME:Radicle';
+  assert.deepEqual(extractThemes(out), ['Déploiement VPS', 'Bug du recap', 'Radicle']);
+});
+
+test('extractThemes — ignores preamble/conclusion and short names (length <= 2)', () => {
+  const out = 'Voici les thèmes :\nTHEME: IA\nTHEME: Sécurité réseau\nEn conclusion...';
+  // "IA" has length 2 → filtered out (matches the bot: name.length > 2)
+  assert.deepEqual(extractThemes(out), ['Sécurité réseau']);
+});
+
+test('extractThemes — no THEME lines yields [] (the "no themes" failure path)', () => {
+  assert.deepEqual(extractThemes('- sujet 1\n- sujet 2'), []);
+});
+
+// parseHermesOutput — the -Q (quiet-mode) replacement for the old banner scraper.
+// Fixtures mirror real Hermes v0.17.0 output captured 2026-06-27 (issue 9864045).
+
+test('parseHermesOutput — clean -Q success: stdout is the response, id from stderr', () => {
+  const stdout = 'Bonjour ! Voici la réponse à votre question.';
+  const stderr = '\nsession_id: 20260627_105754_141970';
+  assert.deepEqual(parseHermesOutput(stdout, stderr), {
+    response: 'Bonjour ! Voici la réponse à votre question.',
+    sessionId: '20260627_105754_141970',
+  });
+});
+
+test('parseHermesOutput — drops a leaked ⚠ CLI diagnostic line (real 0.17.0 capture)', () => {
+  const stdout =
+    '  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\n' +
+    'API call failed after 3 retries: HTTP 404: model "" not found';
+  const stderr = '\nsession_id: 20260627_105754_141970';
+  assert.deepEqual(parseHermesOutput(stdout, stderr), {
+    response: 'API call failed after 3 retries: HTTP 404: model "" not found',
+    sessionId: '20260627_105754_141970',
+  });
+});
+
+test('parseHermesOutput — preserves a real ⚠️ emoji that leads the answer', () => {
+  const stdout = '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.';
+  assert.equal(
+    parseHermesOutput(stdout, '').response,
+    '⚠️ Attention : pensez à sauvegarder.\nDeuxième ligne.'
+  );
+});
+
+test('parseHermesOutput — session id read from stderr, not stdout', () => {
+  assert.equal(parseHermesOutput('réponse sans id', 'session_id: ABC123').sessionId, 'ABC123');
+});
+
+test('parseHermesOutput — warning-only stdout yields empty response (fallback path)', () => {
+  const stdout = '  ⚠ tirith security scanner enabled but not available';
+  assert.deepEqual(parseHermesOutput(stdout, ''), { response: '', sessionId: null });
+});
+
+// MAX_ITERATIONS_NOTICE — a run that exhausts --max-turns exits 0 and prints this control line
+// before a best-effort answer, so it must never reach Discord. Fixture is a verbatim capture
+// (including its trailing \r). See issue 54ed189.
+
+test('parseHermesOutput — drops the --max-turns notice (verbatim capture, trailing \\r)', () => {
+  const stdout =
+    '⚠️  Reached maximum iterations (10). Requesting summary...\r\n' +
+    'Résumé partiel du contenu de la page.';
+  assert.deepEqual(parseHermesOutput(stdout, ''), {
+    response: 'Résumé partiel du contenu de la page.',
+    sessionId: null,
+  });
+});
+
+test('parseHermesOutput — drops the notice with a bare ⚠ prefix or none at all', () => {
+  for (const prefix of ['⚠️  ', '⚠ ', '', '  ']) {
+    const stdout = `${prefix}Reached maximum iterations (3). Requesting summary...\nRéponse.`;
+    assert.equal(
+      parseHermesOutput(stdout, '').response,
+      'Réponse.',
+      `prefix: ${JSON.stringify(prefix)}`
+    );
+  }
+});
+
+test('MAX_ITERATIONS_NOTICE — detects the notice anywhere in raw multi-line stdout', () => {
+  // summarizeLink tests raw stdout, not the parsed response, so the pattern must match mid-stream.
+  const stdout =
+    'Ligne une.\n⚠️  Reached maximum iterations (10). Requesting summary...\nLigne deux.';
+  assert.ok(MAX_ITERATIONS_NOTICE.test(stdout));
+});
+
+test('MAX_ITERATIONS_NOTICE — does not match a real French answer mentioning iterations', () => {
+  assert.ok(
+    !MAX_ITERATIONS_NOTICE.test("L'algorithme atteint le maximum d'itérations en 3 passes.")
+  );
+  assert.ok(!MAX_ITERATIONS_NOTICE.test('⚠️ Attention : pensez à sauvegarder.'));
+});
+
+test('parseHermesOutput — no session id anywhere yields null', () => {
+  assert.equal(parseHermesOutput('juste une réponse', '').sessionId, null);
+});
+
+// clarify-status leak: Hermes 0.17.0 non-interactive agent-clarification (issue 0922f81)
+
+test('parseHermesOutput — strips a leaked clarify status prefix (inline, real capture)', () => {
+  const stdout =
+    '(clarify timed out after 120s — agent will decide) Voici un résumé des actualités.';
+  assert.equal(parseHermesOutput(stdout, '').response, 'Voici un résumé des actualités.');
+});
+
+test('parseHermesOutput — strips a clarify status on its own line', () => {
+  const stdout = '(clarify timed out after 5s — agent will decide)\nRéponse réelle.';
+  assert.equal(parseHermesOutput(stdout, '').response, 'Réponse réelle.');
+});
+
+test('parseHermesOutput — leaves a non-leading parenthetical untouched', () => {
+  const stdout = 'Voici la réponse (clarify quand même, agent will decide). Fin.';
+  assert.equal(
+    parseHermesOutput(stdout, '').response,
+    'Voici la réponse (clarify quand même, agent will decide). Fin.'
+  );
+});
+
+test('parseHermesOutput — leaves a real answer that leads with 📖 or mentions "reading" untouched', () => {
+  // The 0.16 "📖 Reading …" trace filter is gone (issue 346c1cf); an emoji-led answer is kept.
+  const stdout = '📖 Un livre : la lecture (reading) attentive éclaire le propos.';
+  assert.equal(
+    parseHermesOutput(stdout, '').response,
+    '📖 Un livre : la lecture (reading) attentive éclaire le propos.'
+  );
+});
+
+// --- summary questions (issue 576af84) --------------------------------------
+
+test('buildSummaryFormat — points and questions are digit-first numbered lines, no # headings', () => {
+  const f = buildSummaryFormat();
+  // "1. **Titre**" starts with a digit, so unwrapText keeps it on its own line; "**1." would not.
+  assert.match(f, /^1\. \*\*Titre du point\*\* :/m);
+  assert.doesNotMatch(f, /^\*\*\d/m);
+  assert.match(f, /^\*\*Questions\*\* :\n1\. .+\?\n2\. .+\?\n3\. .+\?$/m);
+  assert.match(f, /sans titres Markdown \(#\)/);
+});
+
+const SUMMARY = `Voici un résumé de l'article « X » :
+
+**Idée principale** : Une idée.
+
+**Points clés** :
+1. **Premier** : Deux phrases.
+2. **Second** : Deux phrases.
+
+**Questions** :
+1. Pourquoi ?
+2. Comment ?
+3. Et ensuite ?`;
+
+test('splitQuestions — cuts the numbered questions off, body keeps everything before', () => {
+  const { body, questions } = splitQuestions(SUMMARY);
+  assert.deepEqual(questions, ['Pourquoi ?', 'Comment ?', 'Et ensuite ?']);
+  assert.ok(body.endsWith('2. **Second** : Deux phrases.'), 'points stay in the body');
+  assert.doesNotMatch(body, /Questions/);
+});
+
+test('splitQuestions — header glued onto the previous line by unwrapText still splits', () => {
+  const glued = '**Idée principale** : Une idée. **Questions** :\n1. Pourquoi ?\n2. Comment ?';
+  assert.deepEqual(splitQuestions(glued), {
+    body: '**Idée principale** : Une idée.',
+    questions: ['Pourquoi ?', 'Comment ?'],
+  });
+});
+
+test('splitQuestions — accepts "1)" numbering and extra blank lines', () => {
+  const s = 'Corps.\n\n**Questions** :\n\n1) Pourquoi ?\n\n2) Comment ?\n';
+  assert.deepEqual(splitQuestions(s).questions, ['Pourquoi ?', 'Comment ?']);
+});
+
+test('splitQuestions — returns null rather than drop content', () => {
+  assert.equal(splitQuestions(SUMMARY + '\nBonne lecture !'), null, 'trailing non-question line');
+  assert.equal(splitQuestions('Corps.\n**Questions** :\n1. Seule ?'), null, 'fewer than 2');
+  assert.equal(
+    splitQuestions('Corps.\n**Questions** : Pourquoi ? Comment ?'),
+    null,
+    'not numbered'
+  );
+  assert.equal(splitQuestions('**Questions** :\n1. A ?\n2. B ?'), null, 'empty body');
+  assert.equal(splitQuestions('Pas de section.'), null, 'no header');
+  assert.equal(splitQuestions(''), null);
+  assert.equal(splitQuestions(null), null);
+});
+
+test('questionFrom — recognises only question messages', () => {
+  assert.equal(questionFrom(`${QUESTION_PREFIX}Pourquoi ?`), 'Pourquoi ?');
+  assert.equal(questionFrom('Voici un résumé…'), null);
+  assert.equal(questionFrom(undefined), null);
+});
+
+test('buildQuestionReply — quotes the question before the member reply', () => {
+  assert.equal(
+    buildQuestionReply('Pourquoi ?', 'Parce que.'),
+    'En réponse à ta question « Pourquoi ? » : Parce que.'
+  );
+});
+
+// --- titleFromSummary (issue 0ffd609) ---------------------------------------
+
+test('titleFromSummary — the « titre » of the intro line', () => {
+  const summary =
+    "Voici un résumé de l'article « On aime dire que c'est un robinet : le stérilet masculin » de France 3 :\n\n**Idée principale** : x.";
+  assert.equal(
+    titleFromSummary(summary),
+    "On aime dire que c'est un robinet : le stérilet masculin"
+  );
+});
+
+test('titleFromSummary — only the intro line counts; none there → null', () => {
+  assert.equal(
+    titleFromSummary('Résumé sans titre.\n\n**Points clés** : « cité » plus bas.'),
+    null
+  );
+});
+
+test('titleFromSummary — abstention, empty or missing summary → null', () => {
+  assert.equal(titleFromSummary("Je n'ai pas pu lire le contenu de ce lien."), null);
+  assert.equal(titleFromSummary(''), null);
+  assert.equal(titleFromSummary(undefined), null);
+});

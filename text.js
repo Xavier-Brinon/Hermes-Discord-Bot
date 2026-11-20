@@ -1,0 +1,277 @@
+// text.js
+// Text/URL helpers the bot uses to shape Hermes output and pull links out of messages. The
+// core helpers (unwrapText, splitAtBoundaries, extractLinks) are pure and unit-tested
+// (issue 6115cc3). formatHermesResponse + sendLongResponse were added with the
+// modularisation (issue 950dc54): formatHermesResponse is pure; sendLongResponse does
+// Discord I/O (it splits then sends), operating on a duck-typed message object.
+
+'use strict';
+
+const { MessageType } = require('discord.js');
+const { messagesFR, DISCORD_MSG_LIMIT, LINK_PATTERN } = require('./config');
+
+// Global variant of config.LINK_PATTERN to collect EVERY URL in a message — String.match
+// with the non-global LINK_PATTERN returns only the first. Built once; String.match with a
+// global regex does not use lastIndex, so this module-level instance is safe to reuse.
+const ALL_LINKS_PATTERN = new RegExp(LINK_PATTERN.source, 'gi');
+
+// Every URL in `content`, in order; [] when there is none. No host filter — the 📝-reaction
+// handler summarises whatever a human deliberately reacted to (the reaction IS the "worth
+// summarising" decision), so it reads [] as "no link, stay silent". Pure; the caller caps
+// how many it summarises. The former isNonArticleUrl/NON_ARTICLE_PATTERN denylist (issue
+// e89a541) existed only for the auto-summary path, which is gone (issue c8dafc0) — dropped
+// here so an explicit 📝 on a YouTube/Spotify link is summarised, not silently skipped. See
+// issue 71e2200.
+function extractLinks(content) {
+  return (content || '').match(ALL_LINKS_PATTERN) || [];
+}
+
+// Ground-truth metadata for `url` from the Discord message's embed: { title, author,
+// provider }, or null when there's no usable embed. Discord resolves a rich embed (title +
+// channel/author) for YouTube/link posts; the summariser anchors Hermes on it so it can't
+// hallucinate a different video/page. Prefers the embed whose `.url` matches the link; falls
+// back to the sole embed (Discord normalises youtu.be → youtube.com/watch, so exact-url can
+// miss on a single-link message). Pure + duck-typed for tests. See issue 1b94451.
+function extractLinkMeta(message, url) {
+  const embeds = message && message.embeds;
+  if (!Array.isArray(embeds) || embeds.length === 0) return null;
+  const byUrl = embeds.find((e) => e && e.title && e.url && e.url === url);
+  const embed = byUrl || (embeds.length === 1 && embeds[0] && embeds[0].title ? embeds[0] : null);
+  if (!embed || !embed.title) return null;
+  return {
+    title: embed.title,
+    author: (embed.author && embed.author.name) || null,
+    provider: (embed.provider && embed.provider.name) || null,
+  };
+}
+
+// True when the user directly @mentioned `userId` in the message TEXT — i.e. typed
+// @Bot, so its `<@id>` / `<@!id>` token is in the content (the same token the handler
+// strips). Deliberately content-only: unlike discord.js's message.mentions.has(),
+// which by default also returns true for @everyone/@here, a role the bot holds, and
+// every reply to the bot's own message, this counts ONLY a real @mention — so the bot
+// stops answering every reply and every @everyone. See issue f482c08.
+function mentionsUser(content, userId) {
+  return new RegExp(`<@!?${userId}>`).test(content || '');
+}
+
+// True when `message` is a reply to a message authored by `userId`. Discord sets
+// message.mentions.repliedUser to the replied-to author for ANY reply (ping on or off)
+// and ONLY for replies, so a reply to the bot counts as a mention while @everyone, a
+// role the bot holds, a plain message, and a reply to someone else do NOT — it pairs
+// with mentionsUser to allow conversation-continuation without reintroducing the noise
+// f482c08 removed. See issue 92b16a6.
+function isReplyTo(message, userId) {
+  return message?.mentions?.repliedUser?.id === userId;
+}
+
+// True when `authorId` is the configured admin. A DM hands the sender a Hermes agent on the
+// owner's key, so only the admin gets one; with ADMIN_USER_ID unset nobody does (fail
+// closed). See issue 5cd6f24.
+function isAdmin(authorId, adminId) {
+  return Boolean(adminId) && authorId === adminId;
+}
+
+// Unwrap terminal-formatted text: merge lines broken mid-sentence
+// Hermes outputs at ~80 chars regardless of prompt instructions
+function unwrapText(text) {
+  if (!text) return text;
+  const lines = text.split('\n');
+  const result = [];
+  let buffer = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      // Empty line = paragraph break
+      if (buffer) {
+        result.push(buffer);
+        buffer = '';
+      }
+      result.push('');
+      continue;
+    }
+    // Structural markers = new paragraph
+    if (/^(📊|🔥|🔗|🤖|📌|❓|⚠️|##|THEME:|---$|[-\d]+[.)]\s)/.test(trimmed)) {
+      if (buffer) {
+        result.push(buffer);
+        buffer = '';
+      }
+      // THEME: and --- lines must stay standalone — don't merge summary into them
+      if (/^THEME:/i.test(trimmed) || trimmed === '---') {
+        result.push(trimmed);
+        // buffer stays empty so summary lines start fresh
+      } else {
+        buffer = trimmed;
+      }
+      continue;
+    }
+    // Merge: append to current paragraph
+    if (buffer) {
+      buffer += ' ' + trimmed;
+    } else {
+      buffer = trimmed;
+    }
+  }
+  if (buffer) result.push(buffer);
+
+  return result.join('\n');
+}
+
+// Split text into chunks each <= maxLen, preferring paragraph then sentence
+// boundaries; an over-long single paragraph is hard-split. Caller passes the limit
+// (the bot uses DISCORD_MSG_LIMIT = 1900, leaving margin under Discord's 2000).
+function splitAtBoundaries(text, maxLen) {
+  const chunks = [];
+  const paragraphs = text.split('\n');
+  let current = '';
+
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) {
+      // Empty line = paragraph separator — flush current if non-empty
+      if (current) {
+        chunks.push(current.trim());
+        current = '';
+      }
+      continue;
+    }
+
+    const candidate = current ? current + '\n' + trimmed : trimmed;
+
+    if (candidate.length <= maxLen) {
+      current = candidate;
+    } else {
+      // Candidate too long — flush current, start new chunk
+      if (current) {
+        chunks.push(current.trim());
+      }
+      // If this single paragraph exceeds maxLen, hard-split it
+      if (trimmed.length > maxLen) {
+        let remaining = trimmed;
+        while (remaining.length > maxLen) {
+          // Try to split at last sentence boundary (., !, ?, :, ;) within limit
+          let cutAt = maxLen;
+          const lastPunct = remaining.lastIndexOf('.', maxLen);
+          if (lastPunct > maxLen * 0.6) cutAt = lastPunct + 1;
+          else {
+            const lastSpace = remaining.lastIndexOf(' ', maxLen);
+            if (lastSpace > maxLen * 0.6) cutAt = lastSpace;
+          }
+          chunks.push(remaining.substring(0, cutAt).trim());
+          remaining = remaining.substring(cutAt).trim();
+        }
+        current = remaining;
+      } else {
+        current = trimmed;
+      }
+    }
+  }
+  if (current) chunks.push(current.trim());
+  return chunks;
+}
+
+// Format a Hermes response for Discord: unwrap terminal line-breaks, or fall back to the
+// French "no info" message when empty. No truncation — the caller handles splitting.
+function formatHermesResponse(response) {
+  if (!response) return messagesFR.fallbackResponse;
+  return unwrapText(response);
+}
+
+// Reply to a Discord message without letting a rejected reply escape as an unhandled
+// rejection (issue 1ff433a). message.reply can reject when the bot lacks Send-Messages
+// permission or the channel was deleted; such failures must be logged, not crash the
+// PM2-supervised process. Returns the sent message on success, null on failure.
+async function safeReply(message, content) {
+  try {
+    return await message.reply(content);
+  } catch (e) {
+    console.error('Reply failed:', e.message);
+    return null;
+  }
+}
+
+// Discord caps a thread name at 100 characters; this generic title is the fallback when a
+// caller has no descriptive context to offer.
+const DEFAULT_THREAD_TITLE = '📄 Réponse détaillée';
+const THREAD_TITLE_MAX = 100;
+
+// Build a Discord thread title from a raw context string (the triggering question, or a
+// link's embed title). Prefixes 📄, collapses whitespace, and truncates to Discord's 100-char
+// cap with a trailing ellipsis — cutting on a word boundary when there's a late space (mirrors
+// splitAtBoundaries' `> maxLen * 0.6` rule) and iterating by code point (Array.from) so a
+// surrogate-pair emoji is never split in half. Falls back to DEFAULT_THREAD_TITLE when there's
+// no usable context, so a thread always has a title. Pure; unit-tested. See issue a4f5bc2.
+function buildThreadTitle(raw) {
+  const text = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return DEFAULT_THREAD_TITLE;
+  const title = `📄 ${text}`;
+  const chars = Array.from(title); // code points — keeps emoji/surrogate pairs whole
+  if (chars.length <= THREAD_TITLE_MAX) return title;
+  // Reserve one code point for the … ellipsis, then prefer a word boundary if a space sits
+  // past ~60% of the cap, so a normal sentence isn't cut mid-word.
+  let cut = chars.slice(0, THREAD_TITLE_MAX - 1).join('');
+  cut = cut.trimEnd();
+  const lastSpace = cut.lastIndexOf(' ');
+  if (lastSpace > THREAD_TITLE_MAX * 0.6) cut = cut.slice(0, lastSpace).trimEnd();
+  return `${cut}…`;
+}
+
+// Discord posts a ThreadCreated system message ("X started a thread") in the channel when a
+// thread starts on a message that is not the latest. True only for the bot's OWN notice, which the
+// bot deletes so the channel stays clean (issue 21fd897, ADR 0001); a member's is left alone.
+function isOwnThreadNotice(message, botId) {
+  return message.type === MessageType.ThreadCreated && message.author?.id === botId;
+}
+
+// Send a (possibly long) text to Discord: one reply if it fits, else split at boundaries
+// and post the chunks — directly in a thread, or in a new thread otherwise. `threadTitle`
+// names a freshly-created thread (default keeps the old generic title); callers derive a
+// content-reflecting one via buildThreadTitle (issue a4f5bc2). Resolves to the posted
+// Message(s).
+async function sendLongResponse(message, text, threadTitle = DEFAULT_THREAD_TITLE) {
+  if (text.length <= DISCORD_MSG_LIMIT) {
+    // Fits in one message — simple reply
+    return [await message.reply(text)];
+  }
+  return postInThread(message, text, threadTitle);
+}
+
+// Post text in `message`'s thread, whatever its length: in a thread or a DM (no threads
+// there, issue 1631596) post directly; else reuse the thread already on the message (a
+// second startThread throws) or start one. Text that fits stays ONE message — the splitter
+// cuts at every blank line. Resolves to the posted Message(s) (issue f16ff0f, ADR 0001).
+async function postInThread(message, text, threadTitle = DEFAULT_THREAD_TITLE) {
+  const chunks =
+    text.length <= DISCORD_MSG_LIMIT ? [text] : splitAtBoundaries(text, DISCORD_MSG_LIMIT);
+
+  let target = message.channel;
+  if (!target.isThread() && !target.isDMBased()) {
+    target = message.hasThread
+      ? (message.thread ?? (await message.channel.threads.fetch(message.id)))
+      : await message.startThread({ name: threadTitle, autoArchiveDuration: 60 });
+  }
+
+  // Collect every posted message so the caller can key the session on them (issue 244bad7).
+  const posted = [];
+  for (const chunk of chunks) {
+    posted.push(await target.send(chunk));
+  }
+  return posted;
+}
+
+module.exports = {
+  extractLinks,
+  extractLinkMeta,
+  mentionsUser,
+  isReplyTo,
+  isAdmin,
+  unwrapText,
+  splitAtBoundaries,
+  formatHermesResponse,
+  safeReply,
+  buildThreadTitle,
+  sendLongResponse,
+  postInThread,
+  isOwnThreadNotice,
+};

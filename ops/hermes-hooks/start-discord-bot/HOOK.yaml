@@ -1,0 +1,7 @@
+# Hermes gateway hook (issue 1ce88f5). The platform's entrypoint runs `hermes gateway run` with
+# HERMES_HOME=/data on every container start; the gateway loads /data/hooks/* and emits
+# gateway:startup once it is up. Installed with `./manage_hermes.sh install-hook`.
+name: start-discord-bot
+description: Start the Discord bot under PM2 when the Hermes gateway boots
+events:
+  - gateway:startup

@@ -1,0 +1,45 @@
+# dotenvx — .env.keys is NEVER committed. .env is not either (issue 2d31981): the repo is
+# public and the VPS keeps the only live copy.
+.env
+.env.keys
+.env.vault
+.env.previous
+
+# Stray Hermes home: running `hermes` from the repo outside dotenvx reads the
+# encrypted HERMES_HOME as a literal path and creates a junk home named after
+# the ciphertext (with auth state inside). Never commit it. (issue 25e947a)
+encrypted:*
+
+# Dependencies
+node_modules/
+
+# Runtime artifacts
+.link_cache.json
+.session_cache.json
+# Transient recap context offloaded for Hermes @file: injection (issue 1f154fc);
+# cleaned up after each call, but ignore in case a crash orphans one.
+.hermes-recap-ctx-*.txt
+*.log
+
+# PM2
+.pm2/
+dump.pm2
+
+# Private notes kept off the public mirrors (issues 2d31981, c782954)
+docs/private/
+
+# Emacs backups
+*~
+
+# VPS-local, never committed (issue 51ba748): the yt-dlp binary (YTDLP_BIN default)
+# and the autostart hook's Python bytecode
+bin/
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

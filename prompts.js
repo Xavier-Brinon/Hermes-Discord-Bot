@@ -1,0 +1,270 @@
+// prompts.js
+// Single source of truth for the prompts the bot sends to the Hermes CLI, plus
+// the theme parser that consumes the recap output. The bot AND the evals/ harness
+// both import from here so a prompt under test is byte-identical to the one that
+// ships. Edit prompts here, not inline in the bot.
+//
+// Faithful eval note: the recap is NOT sent raw — the bot calls
+//   askHermes(buildRecapPrompt(), context, ...)
+// so the real payload is buildAskPrompt(buildRecapPrompt(), context). Reproduce
+// that nesting when evaluating the recap.
+
+'use strict';
+
+// Shared one-shot summary format for the two summary paths: buildLinkPrompt (auto
+// bare-link summaries) and buildAskPrompt with summarize=true (an @mentioned link).
+// Adaptive labels — "Thèse centrale"/"Arguments clés" for argumentative content
+// (documentaries, essays, op-eds); "Idée principale"/"Points clés" for neutral
+// informational content (news) — so a neutral article isn't forced to invent a thesis.
+// evals/assertions.js hasLinkStructure() keys off the "Thèse centrale"/"Idée principale"
+// + "Questions" markers this emits — keep them in sync.
+//
+// Points and questions are numbered lines that START with the digit (`1. **Titre** :`, not
+// `**1. Titre**`): text.js unwrapText glues every line that doesn't open with a marker onto the
+// previous one, and "digit + ." is a marker while "**" is not — that is what put point 1 on the
+// "Points clés" line. The blank lines keep section headers off the previous section, and the
+// numbered questions are what splitQuestions() below parses (issue 576af84).
+function buildSummaryFormat() {
+  return `Structure ta réponse en français ainsi, avec une ligne vide entre chaque section et sans titres Markdown (#) :
+Voici un résumé du [documentaire / article / vidéo] « [titre] » de [auteur si connu] :
+
+**Thèse centrale** (ou **Idée principale** si le contenu n'est pas argumentatif) : une ou deux phrases.
+
+**Arguments clés** (ou **Points clés** si non argumentatif) :
+1. **Titre du point** : deux ou trois phrases.
+2. **Titre du point** : deux ou trois phrases.
+(trois ou quatre points, un par ligne)
+
+**Questions** :
+1. Première question ouverte qui prolonge la réflexion ?
+2. Deuxième question ?
+3. Troisième question ?
+
+À l'intérieur d'un point ou d'une question, écris d'une traite, sans saut de ligne. Sois concis.`;
+}
+
+// Cut the questions block off a summary so each question can be posted as its own message
+// (issue 576af84). Returns { body, questions } — body is everything before the LAST
+// "**Questions**" header (unwrapText may have glued the header onto the previous line, so it
+// is matched mid-line too), questions the text of each numbered line after it. Returns null
+// whenever the tail is anything but 2+ numbered lines, so the caller posts the summary
+// unchanged: a miss degrades to today's single message, never to lost content.
+function splitQuestions(summary) {
+  const at = (summary || '').lastIndexOf('**Questions**');
+  if (at === -1) return null;
+  const body = summary.slice(0, at).trim();
+  const tail = summary
+    .slice(at + '**Questions**'.length)
+    .replace(/^\s*:/, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const questions = tail.map((l) => l.match(/^\d+[.)]\s+(.+)$/)?.[1]);
+  if (!body || questions.length < 2 || questions.some((q) => !q)) return null;
+  return { body, questions };
+}
+
+// The « titre » from a summary's intro line (`Voici un résumé du … « [titre] » de …`), or null when
+// the first line has none (abstention, off-format). Names the thread of a link with no embed
+// (issue 0ffd609).
+function titleFromSummary(summary) {
+  const intro = (summary || '').trim().split('\n')[0];
+  return intro.match(/«\s*([^»]+?)\s*»/)?.[1] ?? null;
+}
+
+// A posted question message is `❓ <question>`. A reply to one tells Hermes which question the
+// member is answering; the rest of the context comes from resuming the summary's own session.
+const QUESTION_PREFIX = '❓ ';
+
+// The question in a bot message's text, or null if it isn't a question message.
+function questionFrom(text) {
+  return text?.startsWith(QUESTION_PREFIX) ? text.slice(QUESTION_PREFIX.length).trim() : null;
+}
+
+function buildQuestionReply(question, reply) {
+  return `En réponse à ta question « ${question} » : ${reply}`;
+}
+
+// Q&A prompt (hermes-discord-bot-clean.js askHermes). When summarize=true (the user
+// @mentioned the bot with a link), the shared summary format is appended so an
+// @mentioned link is summarised in the same shape as an auto bare-link summary.
+// summarize=false is byte-identical to the former literal — plain Q&A is unchanged.
+function buildAskPrompt(question, extraContext, summarize = false) {
+  const format = summarize ? `\n\n${buildSummaryFormat()}` : '';
+  if (extraContext) {
+    return `Contexte : ${extraContext}\n\nRéponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}${format}`;
+  }
+  return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}${format}`;
+}
+
+// Q&A prompt variant for when extraContext is too large to pass as a single CLI
+// argv (Linux MAX_ARG_STRLEN, ~128 KB) — the recap path is the trigger. Instead of
+// inlining the context, the bot writes it to a file and we reference it with Hermes's
+// own `@file:` context-reference; Hermes strips the token and appends the file under
+// "--- Attached Context ---". Same instruction/question framing as buildAskPrompt; the
+// `@file:` token must be preceded by whitespace and the ref must resolve under Hermes's
+// cwd. See issue 1f154fc.
+function buildAskPromptWithContextFile(question, contextFileRef) {
+  return `Réponds en français uniquement. Écris en paragraphes continus (pas de sauts de ligne artificiels, Discord gère le wrapping). Question : ${question}\n\nLe contexte de la conversation est fourni en pièce jointe. @file:${contextFileRef}`;
+}
+
+// Emitted by Hermes (per buildLinkPrompt's anchor clause) when the content it retrieved does
+// not match the link's known title/author, or it could not read the real content — so the bot
+// posts an honest abstention instead of a fabricated summary. summarizeLink detects this token.
+// See issue 1b94451.
+const LINK_UNREADABLE_SENTINEL = 'CONTENU_INACCESSIBLE';
+
+// Link-summary prompt (summarizeLink). Uses the shared buildSummaryFormat() so bare
+// article-link auto-summaries and @mentioned-link summaries render identically. When `meta`
+// (from the Discord embed: { title, author, provider }) is present, it becomes a ground-truth
+// anchor — Hermes must confirm what it fetched matches that title/author before summarising,
+// else emit LINK_UNREADABLE_SENTINEL. This stops it hallucinating a different video/page when
+// the link (e.g. a YouTube URL) isn't readable via -t web. With meta=null there's no identity
+// to match, but the abstain permission still holds — the prompt grants the same sentinel for a
+// plainly-unreadable page, so a no-embed link can abstain too. See issues 1b94451, de52e4a.
+//
+// `transcript` (issue 7801304) is the video's caption text when one could be retrieved — the
+// case `-t web` cannot serve, since a YouTube watch page is not readable that way. It is a
+// SECOND ground-truth anchor, stronger than `meta`: meta says what the video claims to be,
+// the transcript says what is actually in it. When present it also SUPPRESSES the abstention,
+// because the content is by definition accessible. Defaults to null, and the block is empty in
+// that case, so a three-argument call returns the exact string it returned before this feature.
+function buildLinkPrompt(url, context, meta = null, transcript = null) {
+  // Abstain-or-fabricate guard: rather than invent a summary of a page it couldn't read,
+  // Hermes must reply with the sentinel (summarizeLink maps it → messagesFR.linkUnreadable).
+  // Shared so the two branches emit the instruction identically and never drift. See de52e4a.
+  const abstain = `n'invente rien : réponds UNIQUEMENT par ${LINK_UNREADABLE_SENTINEL} et rien d'autre.`;
+  // With embed meta (a known title/author) the clause ALSO demands the fetched content match
+  // that identity; without meta there's nothing to match, so it's a bare "can't read it →
+  // abstain" — the abstain permission is unconditional, not gated on having a title (de52e4a).
+  const anchor =
+    meta && meta.title
+      ? `\nCe lien est identifié (via ses métadonnées Discord) comme : « ${meta.title} »` +
+        `${meta.author ? ` — auteur/chaîne « ${meta.author} »` : ''}` +
+        `${meta.provider ? ` (${meta.provider})` : ''}.\n` +
+        `VÉRIFICATION OBLIGATOIRE avant de résumer : le contenu que tu récupères doit ` +
+        `correspondre à CE titre et à CET auteur. Si ce n'est pas le cas, ou si tu ne peux ` +
+        `pas accéder au contenu réel (page non lisible, vidéo sans transcription accessible, ` +
+        `etc.), ${abstain} Ne résume jamais un contenu différent de celui indiqué ci-dessus.`
+      : `\nSi tu ne peux pas accéder au contenu réel (page non lisible, vidéo sans ` +
+        `transcription accessible, etc.), ${abstain}`;
+  // Caption text, when we have it. Placed AFTER the anchor so its "do not abstain" instruction
+  // is the last word on the subject: without that, Hermes fetches the unreadable watch page,
+  // concludes it cannot access the content, and emits the sentinel while holding the transcript.
+  // The "reformule" clause keeps the reply a summary — the bot's contract — rather than a
+  // republished caption track. Empty string when absent, which is what preserves the old prompt.
+  const grounding = transcript
+    ? `\nTRANSCRIPTION DE LA VIDÉO (extraite de ses sous-titres — source de vérité prioritaire ` +
+      `sur tout ce que tu pourrais récupérer en ligne) :\n"""\n${transcript}\n"""\n` +
+      `Cette transcription peut être automatique, donc imparfaite ou tronquée : appuie-toi sur ` +
+      `le sens général et ignore les erreurs de transcription manifestes. Le contenu t'étant ` +
+      `accessible par ce biais, n'utilise PAS ${LINK_UNREADABLE_SENTINEL}. Reformule les idées ` +
+      `avec tes propres mots plutôt que de recopier la transcription.`
+    : '';
+  return `Résume en français le contenu de ce lien : ${url}.
+Contexte : ${context || 'aucun'}.${anchor}${grounding}
+${buildSummaryFormat()}`;
+}
+
+// Recap theme-extraction prompt. Verbatim. Steer the recap by editing this string
+// (or pass an alternate to the eval runner) — but keep the THEME: contract that
+// extractThemes() below depends on.
+function buildRecapPrompt() {
+  return (
+    `Voici tous les messages récents de ce canal. ` +
+    `Identifie les thèmes principaux (3 à 5 max) et liste-les simplement. ` +
+    `⚠️ FORMAT OBLIGATOIRE — réponds EXACTEMENT comme ceci, une ligne par thème :\n\n` +
+    `THEME: Nom du thème 1\nTHEME: Nom du thème 2\nTHEME: Nom du thème 3\n\n` +
+    `⚠️ N'inclus PAS d'introduction, de résumé, ni de conclusion. Juste les thèmes.`
+  );
+}
+
+// Parser for the recap output. Verbatim from the bot's inline loop. The other
+// half of the recap prompt/parser contract: a THEME: line with a name > 2 chars
+// becomes a theme; anything else is ignored.
+function extractThemes(rawResponse) {
+  const themes = [];
+  for (const line of rawResponse.split('\n')) {
+    const t = line.trim();
+    if (t.toUpperCase().startsWith('THEME:')) {
+      const name = t.replace(/^THEME:\s*/i, '').trim();
+      if (name && name.length > 2) {
+        themes.push(name);
+      }
+    }
+  }
+  return themes;
+}
+
+// Parser for Hermes quiet-mode (-Q) output. With -Q the agent prints ONLY the
+// final response on stdout — no `⚕ Hermes` banner, no `Query:` echo, no session
+// summary — and the session id on stderr as `session_id: <id>`. Startup
+// diagnostics (e.g. a security-scanner warning) can still leak onto the first
+// stdout lines, so we drop leading blank lines and leaked `⚠ ` CLI warnings
+// before the response. Returns { response, sessionId }. Replaces the old
+// banner-scraping loops + extractSessionId(stdout). See issue 9864045.
+// Hermes prints this control line to stdout when a run exhausts its --max-turns budget, then
+// returns a best-effort answer and exits 0 — so the bot sees success, not failure, and would
+// otherwise post the notice itself as the reply. The existing bare-⚠ skip below does NOT catch it:
+// Hermes emits `⚠️` (U+26A0 + U+FE0F) and that skip deliberately spares the emoji form so a real
+// answer survives. Filtered for every flow, since askHermes runs at Hermes's default 90 and can hit
+// the ceiling too. Exported so summarizeLink can treat a capped run as an abstention instead of
+// posting a summary assembled from partial data. The prefix is optional because the wording was
+// captured on a newer Hermes than the bot runs. See issue 54ed189.
+const MAX_ITERATIONS_NOTICE = /^\s*(?:⚠️?\s*)?Reached maximum iterations\b/mu;
+
+function parseHermesOutput(stdout, stderr) {
+  const lines = String(stdout || '')
+    .split('\n')
+    .filter((line) => !MAX_ITERATIONS_NOTICE.test(line));
+  let i = 0;
+  // Skip leading blanks and leaked CLI diagnostics: a bare `⚠` (U+26A0) NOT
+  // followed by the emoji variation selector — so a real `⚠️` answer survives.
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (t === '' || (t.charCodeAt(0) === 0x26a0 && t.charCodeAt(1) !== 0xfe0f)) {
+      i++;
+      continue;
+    }
+    break;
+  }
+  let response = lines.slice(i).join('\n').trim();
+  // Hermes 0.17.0's agent-clarification can leak a status prefix on
+  // non-interactive (-q) calls, e.g. "(clarify timed out after 120s — agent will
+  // decide)". Strip a leading occurrence — its own line or inline (issue 0922f81).
+  response = response.replace(/^\(clarify\b[^)]*\bdecide\)\s*/i, '');
+  // -Q emits `session_id:` on stderr; search stderr first, fall back to stdout.
+  const idMatch = `${stderr || ''}\n${stdout || ''}`.match(/session_id:\s*(\S+)/);
+  return { response, sessionId: idMatch ? idMatch[1] : null };
+}
+
+// Hermes expands context references (`@file:`, `@folder:`, `@git:`, `@url:`, `@diff`,
+// `@staged`, plugin `@word:`) found anywhere in a query, before the model runs, under its cwd
+// (the workspace until d84e945). Any of them in Discord text let a member attach files or fetch URLs:
+// `@file:.env.keys` sent the dotenvx private key to Mistral (issue 6fe5a3e). A ref only matches
+// when its `@` follows neither a word character nor `/` and precedes a letter
+// (agent/context_references.py REFERENCE_PATTERN), so that `@` becomes the fullwidth `＠`,
+// which Hermes never matches and the model still reads. JS `\w` is ASCII-only where Python's is
+// Unicode, so this catches a superset of what Hermes would expand. Emails and `<@123>` mentions
+// are left alone.
+function neutraliseContextRefs(text) {
+  return text.replace(/(?<![\w/])@(?=[A-Za-z])/g, '＠');
+}
+
+module.exports = {
+  neutraliseContextRefs,
+  LINK_UNREADABLE_SENTINEL,
+  MAX_ITERATIONS_NOTICE,
+  buildAskPrompt,
+  buildAskPromptWithContextFile,
+  buildLinkPrompt,
+  buildSummaryFormat,
+  splitQuestions,
+  titleFromSummary,
+  QUESTION_PREFIX,
+  questionFrom,
+  buildQuestionReply,
+  buildRecapPrompt,
+  extractThemes,
+  parseHermesOutput,
+};

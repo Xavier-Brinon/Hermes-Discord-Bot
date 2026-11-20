@@ -1,0 +1,11 @@
+#!/bin/sh
+# Block a push when gitleaks finds a secret anywhere in the history.
+# Enable once per clone: git config core.hooksPath ops/git-hooks
+# gitleaks version is pinned in mise.toml. Issue 1f2e03e.
+set -eu
+if ! command -v mise >/dev/null 2>&1; then
+  echo "pre-push: mise not found, cannot run gitleaks; push blocked." >&2
+  exit 1
+fi
+cd "$(git rev-parse --show-toplevel)"
+exec mise x -- gitleaks git --redact --verbose --no-banner --log-level warn .

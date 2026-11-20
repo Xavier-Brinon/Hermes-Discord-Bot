@@ -1,0 +1,10 @@
+[2026-05-03 | alice] Quelqu'un a réussi à déployer le bot sur le VPS hier ? J'ai une erreur dotenvx au démarrage.
+[2026-05-03 | bob] Oui, il fallait lancer npx dotenvx run avant pm2. Ça marche maintenant.
+[2026-05-04 | claire] Le récap de mai ne renvoie que les thèmes, c'est voulu ? J'aurais aimé un petit résumé par thème.
+[2026-05-04 | alice] Pour l'instant c'est juste la liste des thèmes, oui. On pourrait l'enrichir.
+[2026-05-05 | david] Super article sur Radicle et le développement souverain : https://radicle.xyz/blog
+[2026-05-05 | bob] Merci, je regarde. On utilise déjà Radicle pour le tracker d'issues du bot.
+[2026-05-06 | claire] Rappel : meetup IA à Lyon jeudi soir, qui vient ?
+[2026-05-06 | david] Présent ! On peut parler du bot Mistral si vous voulez.
+[2026-05-07 | alice] Le watchdog a redémarré le bot trois fois cette nuit, je regarde les logs PM2.
+[2026-05-07 | bob] C'était le timeout Hermes sur une question longue je pense.

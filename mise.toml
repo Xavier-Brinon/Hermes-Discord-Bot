@@ -1,0 +1,3 @@
+# gitleaks for ops/git-hooks/pre-push (issue 1f2e03e). Node comes from .nvmrc.
+[tools]
+gitleaks = "8.30.1"
