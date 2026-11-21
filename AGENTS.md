@@ -6,8 +6,8 @@ and DMs in French, summarises links on a 📝 reaction, and produces channel rec
 This repo adopts the **`@YackShavingSkill`** framework (vendored locally:
 `skills/ examples/ templates/ tools/ schemas/`). The framework master rules are
 in the **`@YackShavingSkill — Master Rules`** section below; its process
-vocabulary is in `docs/waysofworking.org`. Read this whole file first, then follow
-links on demand.
+vocabulary is in the shared ways of working (see Reference). Read this whole
+file first, then follow links on demand.
 
 ---
 
@@ -200,7 +200,9 @@ on the issue's branch and its message carries the lifecycle record.
 ## Reference
 
 - **Artifact schemas:** `schemas/artifacts.md`
-- **Process vocabulary:** `docs/waysofworking.org`
+- **Ways of working:** `~/Documents/Projects/Ways-of-working/ways-of-working.org`,
+  shared by every repo; its index says which section to read for each task,
+  the framework's process vocabulary included.
 - **Complexity rubric and worked examples:** `skills/orchestrator.md`
 - **Pre/Post-Flight format:** `templates/session_journal.md`
 - **Operational runbook:** `README.md`

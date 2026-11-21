@@ -3,9 +3,9 @@
 #+startup: showall indent
 
 A tight, opinionated glossary of terms unique to /this/ project's domain. This
-is *domain* language, distinct from the framework's *process* language in
-=waysofworking.org=. Keep it small; add a term only when its absence would cause
-a misread.
+is *domain* language, distinct from the framework's *process* language in the
+shared [[file:~/Documents/Projects/Ways-of-working/ways-of-working.org][ways of working]]. Keep it small; add a term only when its absence would
+cause a misread.
 
 - Hermes :: The Hermes Agent *CLI binary* (=HERMES_BIN=) the bot shells out to
   via =execFile=. The bot is a wrapper around it, not an API client.
