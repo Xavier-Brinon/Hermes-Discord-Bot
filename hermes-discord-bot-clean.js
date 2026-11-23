@@ -645,7 +645,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 // Start the bot
 console.log('🚀 Démarrage du bot Discord Hermes...');
-console.log('Token (10 premiers caractères):', token.substring(0, 10) + '...');
 
 client.login(token).catch((err) => {
   console.error('❌ Erreur lors du démarrage du bot Discord:', err);
