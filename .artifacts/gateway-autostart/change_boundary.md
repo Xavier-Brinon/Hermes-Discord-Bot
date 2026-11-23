@@ -25,7 +25,7 @@ complexity_tier: STANDARD
 - every `*.js` source file, `test/`, `evals/`, `package.json`
 
 ## Orthogonal Issues (noticed, skipped)
-- HERMES_WEBUI_PASSWORD was printed into the session transcript during investigation — user advised to rotate; not a code change.
+- Platform gateway secret hygiene noted separately during investigation; not a code change.
 - The interactive shell and the platform gateway use different Hermes homes (/data/.hermes vs /data); any future hermes-CLI config meant for the gateway must set HERMES_HOME=/data.
 
 ## Orphan Tracking

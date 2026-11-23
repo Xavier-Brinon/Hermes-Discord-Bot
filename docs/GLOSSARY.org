@@ -9,7 +9,7 @@ a misread.
 
 - Hermes :: The Hermes Agent *CLI binary* (=HERMES_BIN=) the bot shells out to
   via =execFile=. The bot is a wrapper around it, not an API client.
-- Le Mistral Bot :: The deployed Discord bot identity (=Le Mistral Bot#9470=).
+- Le Mistral Bot :: The deployed Discord bot identity for the Le Mistral server.
   "The bot" throughout the docs.
 - Allowed guild :: The single Discord server the bot serves
   (=ALLOWED_GUILD_ID=). Messages from any other guild are silently ignored.

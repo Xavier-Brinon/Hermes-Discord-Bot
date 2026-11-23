@@ -18,7 +18,7 @@ no boot hook we control. No new code, no new script, no config knob.
 - A `pm2 resurrect` boot script — nothing in the sandbox would invoke it at boot; it would be dead code.
 - A systemd/upstart unit — no init system runs (PID 1 is tini); units outside `/data` are wiped on recreate.
 - `pm2 install pm2-logrotate` — disk is at 12%, logs ~2 MB; not this task (out of scope, low value).
-- Any change to the entrypoint `/app/u4s-hermes-agent` — image-baked, host-side, unmodifiable.
+- Any change to the platform container entrypoint — image-baked, host-side, unmodifiable.
 - Reformatting the pre-existing prettier-dirty README/CONTEXT — a whole-file drive-by; left as-is (orthogonal).
 
 ## Line-Count Budget

@@ -25,7 +25,7 @@ complexity_tier: STANDARD
 - `manage_hermes.sh` — the `start` path (dotenvx → pm2 start → pm2 save) already is the recovery; no change needed.
 - `package.json` — pm2 scripts never referenced the deleted files.
 - `hermes-discord-bot-clean.js` + all .js modules (`text.js`, `recap.js`, `prompts.js`, `hermes-cli.js`, `cache.js`, `config.js`) — no bot code touches the watchdog.
-- `/app/u4s-hermes-agent` (container entrypoint) — image-baked, host-side, wiped on recreate, outside the repo.
+- platform container entrypoint — image-baked, host-side, wiped on recreate, outside the repo.
 - `test/`, `evals/` — no runtime surface changed; nothing to test.
 
 ## Orthogonal Issues (noticed, skipped)

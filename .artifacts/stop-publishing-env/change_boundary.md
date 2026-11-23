@@ -18,7 +18,7 @@ complexity_tier: STANDARD
 - Runtime code, tests, `manage_hermes.sh`, `AGENTS.md`, `GLOSSARY.org`, `ops/rotate-secrets.sh`.
 
 ## Orthogonal Issues (noticed, skipped)
-- `ops/rotate-secrets.sh` hard-codes `/data/secrets/.env.keys` and the backup file names: same secret-layout detail, still public.
+- `ops/rotate-secrets.sh` hard-codes the private key path and backup file names: same secret-layout detail, tracked separately.
 - README §Project structure and §After a reboot still mention `.env` / `.env.keys` by name only (no paths of the key): left.
 
 ## Orphan Tracking

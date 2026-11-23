@@ -22,4 +22,4 @@ One `loadEnv()` that calls dotenvx `config({ path: <repo>/.env, strict: true })`
 | 60 (source 20, tests 40), docs not counted | 61 (source 16, tests 45) | +2% |
 
 ## Simplify Triggers (detected)
-- Key location: the explicit `/data/secrets/.env.keys` path planned after the 6fe5a3e incident was dropped. dotenvx reads and writes through a symlink (fsx uses writeFileSync, never unlink/rename), so the stopgap symlink is the permanent layout and load-env.js needs no path option or `-fk` flags.
+- Key location: the explicit off-workspace `.env.keys` path planned after the 6fe5a3e incident was dropped. dotenvx reads and writes through a symlink (fsx uses writeFileSync, never unlink/rename), so the stopgap symlink is the permanent layout and load-env.js needs no path option or `-fk` flags.

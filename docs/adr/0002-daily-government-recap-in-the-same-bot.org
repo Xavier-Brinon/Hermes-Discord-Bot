@@ -7,8 +7,8 @@
 
 The daily recap of French government activity ("veille gouvernementale") is a
 fourth flow of the existing bot, not a second bot. A timer inside the bot's
-process posts one recap a day around 9h (Paris) in #laidé-bas-📢 (channel
-550408292820582430). A second bot would need its own Discord application and
+process posts one recap a day around 9h (Paris) in #laidé-bas-📢 (channel ID
+configured via env). A second bot would need its own Discord application and
 token, its own PM2 process and dotenvx secrets, and a copy of the Hermes =-Q=
 wrapper and its parser. It would also break the rule that the bot runs as
 exactly one process. The existing bot already has the Discord connection, the

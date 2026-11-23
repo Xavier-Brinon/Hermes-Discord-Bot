@@ -53,8 +53,7 @@ Issues live in **`docs/private/issues.org`**, a gitignored Org file. Code is
 plain git, hosted on GitHub. This section is the concrete binding for the
 tracker-neutral issue lifecycle in `docs/waysofworking.org` §Issue tracking and
 lifecycle. Why: `docs/adr/0003-issues-in-a-private-org-file.org`. Issues closed
-before 2026-11-20 stay in the Radicle archive:
-`rad issue show <id> --repo rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`.
+before 2026-11-20 stay in the local Radicle archive (`rad issue show <id>`).
 
 **Every change starts as an issue**, even one-liners. The flow is:
 

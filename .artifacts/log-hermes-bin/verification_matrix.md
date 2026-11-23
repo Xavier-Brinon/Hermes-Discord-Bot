@@ -12,7 +12,7 @@ Scope 1 (hermes-cli.js, hermes-discord-bot-clean.js, test/hermes-cli.test.js) + 
 ## Matrix
 | Subtask | Pass criterion | Test case | Outcome |
 |---------|----------------|-----------|---------|
-| Resolved absolute path logged | `probeHermes` resolves a bare name on PATH, follows symlinks | test/hermes-cli.test.js (absolute, symlink, bare name); local smoke `probeHermes('hermes')` | PASS — /Users/xavierbrinon/.local/bin/hermes |
+| Resolved absolute path logged | `probeHermes` resolves a bare name on PATH, follows symlinks | test/hermes-cli.test.js (absolute, symlink, bare name); local smoke `probeHermes('hermes')` | PASS — ~/.local/bin/hermes |
 | Version logged, best-effort | first non-empty `--version` line; a failing `--version` keeps the path, version null, no throw | test/hermes-cli.test.js (absolute, --version fails) | PASS — "Hermes Agent v0.21.3 (2026.9.14) …" locally |
 | Missing / non-executable reported loudly once | path null + error; ready handler logs ❌ and DMs the admin | test/hermes-cli.test.js (missing, non-executable); local smoke of the default /data path | PASS — "/data/.local/bin/hermes not found or not executable" |
 | No regression | tests, lint, format clean | `npm test`; `npx eslint .`; `npx prettier --check .` | PASS — 131/131 (+6); 0 problems; formatted. Re-run after rebase onto 1337991 (2026-09-25): 141/141 |

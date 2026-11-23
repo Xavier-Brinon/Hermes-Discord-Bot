@@ -850,7 +850,7 @@ Radicle issue: c226bf1 — Supervise or retire the bash watchdog (pm2 startup sy
 - **Simplicity Goal:** Retire the bash watchdog by DELETING `hermes_watchdog.sh` + `start_after_reboot.sh`, and rewrite the README "After a reboot" / "Automatic recovery" sections + the CONTEXT "The harness" line to the honest recovery model: PM2 restarts the bot on crash; a container restart/recreate needs one manual `./manage_hermes.sh start` because the managed sandbox exposes no boot hook we control. I will NOT add a `resurrect` subcommand, a boot script, a systemd/upstart unit, pm2-logrotate, or any change to manage_hermes.sh / package.json / the bot's .js.
 - **Scope Boundaries:**
   - In-scope: hermes_watchdog.sh (delete), start_after_reboot.sh (delete), README.md, CONTEXT.md
-  - Out-of-scope: manage_hermes.sh, package.json, all .js modules, the entrypoint /app/u4s-hermes-agent, test/, evals/
+  - Out-of-scope: manage_hermes.sh, package.json, all .js modules, the platform container entrypoint, test/, evals/
 
 ### Simplicity Strategy
 MINIMAL
@@ -862,7 +862,7 @@ MINIMAL
 ### Assumptions
 `.artifacts/retire-watchdog/pre_computation_block.md`
 
-*(6 assumptions, all HIGH, each backed by an on-VPS verification: PID 1 = tini, no systemd, a real recreate `d715964579bc`→`8100849eb114` left the bot down with the PM2 daemon absent, and the watchdog log was 11 days stale.)*
+*(6 assumptions, all HIGH, each backed by an on-VPS verification: PID 1 = tini, no systemd, a real container recreate left the bot down with the PM2 daemon absent, and the watchdog log was 11 days stale.)*
 
 ## Post-Flight Entry
 
@@ -1711,7 +1711,7 @@ User confirmed 2026-11-18: plan as proposed, repo `.env` untouched (HERMES_DISCO
 ## Post-Flight Entry
 
 ### Reflex Audit
-PASSED. The code matches the Pre-Flight: one `loadEnv()` (dotenvx `config`, strict) called first in the entrypoint and test-token.js, launchers without `dotenvx run`, README §Secrets. Expert Review (independent agent) found no critical issue; its three important findings were applied (`dump.pm2.bak`, stale `pm2 env` health-check line, `pm2 kill` in the deploy) plus the dead `encrypted:` guard. Plan amendment: mid-task, the 6fe5a3e incident showed `.env.keys` must leave Hermes's workspace. The key now lives in `/data/secrets` with a workspace symlink; dotenvx follows it for reads and writes, so the planned explicit key path was dropped and a symlink test added instead. The work was stashed while 6fe5a3e shipped, then re-applied on main 307312c (SESSION_LOG conflict resolved by appending).
+PASSED. The code matches the Pre-Flight: one `loadEnv()` (dotenvx `config`, strict) called first in the entrypoint and test-token.js, launchers without `dotenvx run`, README §Secrets. Expert Review (independent agent) found no critical issue; its three important findings were applied (`dump.pm2.bak`, stale `pm2 env` health-check line, `pm2 kill` in the deploy) plus the dead `encrypted:` guard. Plan amendment: mid-task, the 6fe5a3e incident showed `.env.keys` must leave Hermes's workspace. The key now lives in an off-workspace private key directory with a workspace symlink; dotenvx follows it for reads and writes, so the planned explicit key path was dropped and a symlink test added instead. The work was stashed while 6fe5a3e shipped, then re-applied on main 307312c (SESSION_LOG conflict resolved by appending).
 
 ### Violation Checklist
 - [ ] **Complexity Creep**: 61 vs 60 (+2%).
@@ -1776,12 +1776,12 @@ FAILED on order only (Pre-Flight written after the draft), PASSED on content: th
 Static checks PASS; the real run on the VPS is PENDING.
 
 ### Residual risk carried to handover
-- The wizard cannot be dry-run: stage 2 resets a live token. A failure mid-run is handled by `die` messages and the 0700 `.pre-rotate` backups.
-- Copies of the old key inside a database (Hermes `state.db`) are reported, not deleted.
-- The copy Mistral received during the incident cannot be deleted; rotation makes it useless.
+- The wizard cannot be dry-run: stage 2 resets a live token. A failure mid-run is handled by `die` messages and 0700 backups.
+- Copies of rotated keys inside local databases are reported, not deleted automatically.
+- The copy sent externally during the incident cannot be deleted; rotation makes it useless.
 
 ### Post-Flight amendment (real run, 2026-11-18)
-Stages 1-3 passed (one token: HERMES_DISCORD_TOKEN held the same value as DISCORD_BOT_TOKEN). Stage 4 stopped at its own check: with `--no-armor`, `dotenvx rotate` appends the new key to the old one (`DOTENV_PRIVATE_KEY="old,new"`, `append.js`), which the pre-computation read of `rotate.js` missed. The rest was finished by hand and the script fixed: stage 4 now strips the old key in place, and `restart_and_test` tests before restarting. The old-key search found copies from 2026-06-15/16 (a request dump and WebUI sessions), so the key had been exposed before the 6fe5a3e incident; deleted, the two `state.db` kept. 154 vs 150 lines (+3%).
+Stages 1-3 passed (one token: HERMES_DISCORD_TOKEN held the same value as DISCORD_BOT_TOKEN). Stage 4 stopped at its own check: with `--no-armor`, `dotenvx rotate` appends the new key to the old one (`DOTENV_PRIVATE_KEY="old,new"`, `append.js`), which the pre-computation read of `rotate.js` missed. The rest was finished by hand and the script fixed: stage 4 now strips the old key in place, and `restart_and_test` tests before restarting. Old-key copies were audited and cleaned up per the private runbook. 154 vs 150 lines (+3%).
 
 # Task: neutral-hermes-cwd
 complexity_score: 5
@@ -1918,9 +1918,9 @@ PASSED: the diff is the Simplicity Goal and nothing else: README §Secrets cut i
 ### Verification Results
 `.artifacts/stop-publishing-env/verification_matrix.md`
 
-173/173. No `§Secrets` or `/data/secrets` left in README. VPS migration PENDING: back up `.env` before the pull.
+173/173. No `§Secrets` or private key path left in README. VPS migration PENDING: back up `.env` before the pull.
 
 ### Residual risk carried to handover
 - The VPS pull deletes `.env` (or refuses on its local changes): follow the backup-pull-restore procedure posted on 2d31981, restart only after the restore.
-- `ops/rotate-secrets.sh` still names `/data/secrets` and the backup file names publicly; user decision.
+- `ops/rotate-secrets.sh` still names the private key path and backup file names; user decision.
 - The runbook exists only on the Mac until it is copied to its final private home.

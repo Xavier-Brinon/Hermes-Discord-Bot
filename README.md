@@ -4,7 +4,7 @@ French-language Discord bot powered by Hermes Agent. Answers @mentions in French
 
 ## Current status
 
-- **Bot name**: Le Mistral Bot#9470
+- **Bot name**: Le Mistral Bot
 - **Status**: ✅ Online (PM2)
 - **Framework**: Node.js + discord.js v14
 - **Security**: Token encrypted via dotenvx
@@ -104,7 +104,7 @@ git reset --hard <sha>        # go back to the stable commit
 
 The bot runs in a **managed Docker sandbox**. A container restart or recreate
 kills every process — PM2 included — and re-runs the platform entrypoint
-(`tini -- /app/u4s-hermes-agent`), which starts a Hermes gateway
+(the platform's `tini` entrypoint), which starts a Hermes gateway
 (`hermes gateway run`, with `HERMES_HOME=/data`) but not the bot.
 
 The bot rides on that gateway: a **gateway hook** in `/data/hooks/` runs

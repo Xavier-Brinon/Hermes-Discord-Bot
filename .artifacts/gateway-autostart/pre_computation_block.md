@@ -20,7 +20,7 @@ complexity_tier: STANDARD
 ## Verifications
 | # | command | expected | actual | timestamp | verdict |
 |---|---------|----------|--------|-----------|---------|
-| 1 | `tr '\\0' ' ' < /proc/1/cmdline` + `ps --forest` (user, on VPS) | platform entrypoint spawns the gateway | `tini -- /app/u4s-hermes-agent` → `hermes gateway run` (PID 12) | 2026-09-23T06:38:53Z | PASS |
+| 1 | `tr '\\0' ' ' < /proc/1/cmdline` + `ps --forest` (user, on VPS) | platform entrypoint spawns the gateway | `tini` platform entrypoint → `hermes gateway run` (PID 12) | 2026-09-23T06:38:53Z | PASS |
 | 2 | grep `gateway:startup` + `_resolve_hooks_dir` in /opt/hermes-agent/gateway (user, on VPS) | event emitted; dir = home/hooks | run_startup.py:1245 emits; hooks.py:36 `get_hermes_home() / "hooks"` | 2026-09-23T06:38:53Z | PASS |
 | 3 | README "After a reboot" + `ls -la /data/hooks` | /data persisted; hooks dir present | README documents /data as the persisted volume; /data/hooks exists, empty | 2026-09-23T06:38:53Z | PASS |
 | 4 | /proc/12/environ HERMES_HOME (user, on VPS) | gateway home differs from the bot's hermes home | HERMES_HOME=/data vs the bot's /data/.hermes | 2026-09-23T06:38:53Z | PASS |

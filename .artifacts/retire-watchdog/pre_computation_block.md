@@ -19,9 +19,9 @@ complexity_tier: STANDARD
 ## Verifications
 | # | command | expected | actual | timestamp | verdict |
 |---|---------|----------|--------|-----------|---------|
-| 1 | `cat /proc/1/comm` (VPS) | not systemd | `tini` (entrypoint `tini -- /app/u4s-hermes-agent`) | 2026-07-06T12:10:00Z | PASS |
+| 1 | `cat /proc/1/comm` (VPS) | not systemd | `tini` (platform container entrypoint) | 2026-07-06T12:10:00Z | PASS |
 | 2 | `systemctl --version; pidof systemd` (VPS) | no init system | "NO systemd binary"; "systemd NOT running" | 2026-07-06T12:10:00Z | PASS |
-| 3 | hostname before vs after a real recreate (VPS) | hostname changes = container cycled | `d715964579bc` → `8100849eb114` | 2026-07-06T12:34:00Z | PASS |
+| 3 | hostname before vs after a real recreate (VPS) | hostname changes = container cycled | container hostname changed across recreate | 2026-07-06T12:34:00Z | PASS |
 | 4 | `npx pm2 list` immediately after the recreate (VPS) | bot NOT auto-started | daemon spawned empty; "bot NOT in pm2" | 2026-07-06T12:34:00Z | PASS |
 | 5 | `ls -la /data/workspace/hermes_watchdog.log` (VPS) | stale = watchdog dead | mtime 2026-06-25 (11 days stale) | 2026-07-06T12:00:00Z | PASS |
 | 6 | `grep -rn hermes_watchdog\|start_after_reboot package.json` | no pm2-script reference | no matches | 2026-07-06T12:50:00Z | PASS |
@@ -37,7 +37,7 @@ complexity_tier: STANDARD
 - manage_hermes.sh — its `start` path (dotenvx → pm2 start → pm2 save) already IS the recovery; no change needed
 - package.json — pm2 scripts never referenced the deleted files; no change
 - hermes-discord-bot-clean.js and all .js modules — this is an ops/docs change; no bot code touches the watchdog
-- /app/u4s-hermes-agent (the container entrypoint) — host-side, image-baked, wiped on recreate, and outside this repo; unmodifiable
+- platform container entrypoint — host-side, image-baked, wiped on recreate, and outside this repo; unmodifiable
 - evals/, test/ — no runtime surface changes; nothing to test
 
 ## Interpretations of the request

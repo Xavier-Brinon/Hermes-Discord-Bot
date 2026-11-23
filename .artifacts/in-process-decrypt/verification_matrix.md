@@ -21,7 +21,7 @@ Scope 2 (8 files) + Ambiguity 1 (PM2 env capture and key lookup to establish) + 
 | No regression | tests, lint, format, shell syntax | node --test; npx eslint .; npx prettier --check .; bash -n | PASS: 170/170 (+4) |
 | AC no plaintext in dump | `grep -c DISCORD_BOT_TOKEN /data/.pm2/dump.pm2*` = 0 each | VPS, after `pm2 kill` + start + `rm dump.pm2.bak` | PENDING: deploy |
 | AC /proc clean | `/proc/<bot pid>/environ` and daemon environ hold no DISCORD_BOT_TOKEN (count) | VPS, after deploy | PENDING: deploy |
-| AC .env.keys | 0600 file in 0700 /data/secrets, workspace symlink, password-manager backup | VPS `ls -l`; owner confirmed backup | PASS (stopgap 2026-11-18) |
+| AC .env.keys | 0600 file in 0700 private key dir, workspace symlink, password-manager backup | VPS `ls -l`; owner confirmed backup | PASS (stopgap 2026-11-18) |
 | AC logs | grep of PM2 logs + .autostart.log after Q&A/📝/recap finds no secret | VPS, after deploy | PENDING: deploy |
 | AC README §Secrets | inventory, restore, rotation, leak rule | README.md §Secrets | PASS |
 | Rotation | keypair, DISCORD_BOT_TOKEN, revoke HERMES_DISCORD_TOKEN | VPS + Discord portal | PENDING: after deploy |
