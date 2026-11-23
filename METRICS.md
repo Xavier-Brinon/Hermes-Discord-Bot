@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-11-23T21:28:17Z
-source_count: 58
+timestamp: 2026-11-23T21:31:39Z
+source_count: 59
 ---
 
 # Metrics — @YackShavingSkill
@@ -24,6 +24,7 @@ they do not represent current drift. Canonical definition:
 | child-env-allowlist | COMPLEX | FAIL | 100% |
 | d583385-prettierignore | STANDARD | PASS | 100% |
 | delete-thread-notice | STANDARD | PASS | 100% |
+| dep-audit-cleanup | STANDARD | PASS | 100% |
 | diagnostic-pitfalls | TRIVIAL | PASS | 100% |
 | dm-admin-gate | COMPLEX | PASS | 100% |
 | dm-channel-type | TRIVIAL | PASS | 100% |
@@ -82,9 +83,9 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 58 |
+| Total tasks | 59 |
 | PASS rate (Reflex) | 97% |
-| Mean Scope Adherence | 97.1% |
+| Mean Scope Adherence | 97.2% |
 
 ## Violations by type
 | Type | Count across all tasks |
@@ -154,3 +155,4 @@ they do not represent current drift. Canonical definition:
 | 2026-11-18T22:50:00Z | stop-publishing-env | 100% |
 | 2026-11-23T21:23:30Z | url-guard | 100% |
 | 2026-11-23T21:28:00Z | rate-limiter | 100% |
+| 2026-11-23T21:31:00Z | dep-audit-cleanup | 100% |

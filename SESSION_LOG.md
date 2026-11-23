@@ -2015,3 +2015,47 @@ PASSED. The implementation matches the Pre-Flight commitment: one zero-dependenc
 
 ### Residual risk carried to handover
 - Rate state is in-memory and resets on PM2 restart, which is acceptable for a 60-second window.
+
+# Task: dep-audit-cleanup
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Remove unused `axios` and `dotenv` from `package.json`, regenerate `package-lock.json`, and run `npm audit fix` (no `--force`) to clear production high/critical vulnerabilities. I will NOT touch runtime JS modules or add manual overrides unless an audit finding remains.
+- **Scope Boundaries:**
+  - In-scope: `package.json`, `package-lock.json`
+  - Out-of-scope: all `*.js` source/test files, `README.md`, `manage_hermes.sh`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (remove unused deps and update lockfile only).
+- Anti-Pattern avoided: `examples/anti-patterns/kitchen-sink-scaffold.md` (no unnecessary tool/manager swap).
+
+### Assumptions
+`.artifacts/dep-audit-cleanup/pre_computation_block.md`
+
+### Line-Count Budget
+10 logical lines in `package.json` (lockfile tool-generated).
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The change matches the Pre-Flight commitment: removed unused `axios` and `dotenv` from `package.json`, regenerated `package-lock.json`, and ran non-breaking `npm audit fix`. Both `npm audit --omit=dev` and full `npm audit` now report `found 0 vulnerabilities` (down from 14 prod / 17 total, including 12 high), with zero manual overrides and zero runtime code edits.
+
+### Violation Checklist
+- [ ] **Complexity Creep**: none (-2 lines in `package.json`).
+- [ ] **Scope Bleed**: none; only declared files touched.
+- [ ] **Style Drift**: none.
+- [ ] **Issue Lifecycle**: closes `20261123T200856` at merge.
+
+### Verification Results
+`.artifacts/dep-audit-cleanup/verification_matrix.md`
+
+3/3 subtasks PASS. `npm audit --omit=dev` = 0 vulnerabilities; 189/189 tests pass; eslint 0 errors; prettier clean.
+
+### Residual risk carried to handover
+- Remember to run `npm install` on the VPS when deploying this commit so production `node_modules` receives the patched transitive versions (`undici`, `ws`, `basic-ftp`, `ip-address`, `js-yaml`, `systeminformation`).
