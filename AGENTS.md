@@ -47,54 +47,67 @@ operational runbook.
 - **Secrets only via dotenvx.** Never commit `.env.keys`. Add/rotate vars with
   `npx dotenvx set NAME "value"`.
 
-## Radicle ways of working (this project's forge skill)
+## Issue tracking (this project's tracker binding)
 
-This repo uses **Radicle** (`rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`) as the source of
-truth for issues and code review. GitHub is a mirror; Radicle is canonical. This
-section is the concrete forge binding for the tracker-neutral issue lifecycle
-described in `docs/waysofworking.org` §Issue tracking and lifecycle.
+Issues live in **`docs/private/issues.org`**, a gitignored Org file. Code is
+plain git, hosted on GitHub. This section is the concrete binding for the
+tracker-neutral issue lifecycle in `docs/waysofworking.org` §Issue tracking and
+lifecycle. Why: `docs/adr/0003-issues-in-a-private-org-file.org`. Issues closed
+before 2026-11-20 stay in the Radicle archive:
+`rad issue show <id> --repo rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`.
 
-**Every change starts as a `rad issue`** — even one-liners. The flow is:
+**Every change starts as an issue**, even one-liners. The flow is:
 
 ```
-issue → branch → rad patch → review → merge → solve issue
+issue → branch → self-review → merge → close
 ```
 
-1. **Open an issue** with triage labels (see below). One concern per issue, so it
-   stays independently grabbable.
-2. **Branch** off `main` named after the issue (e.g. `issue/dotenvx-runtime-dep`).
-3. **Propose a `rad patch`** instead of pushing to `main`. Self-review counts as
-   review for a solo repo, but the patch object records the diff and discussion.
-4. **Lifecycle comment, then state change.** Before any `rad issue state`, post a
-   `rad issue comment` recording: patch ID + HEAD SHA, how it was reviewed, how it
-   was merged, build/lint/test outcome, and the `Fix N closes <issue>` line. A
-   bare state change with no comment is an incomplete record.
-5. **Close** with `--solved` (done/merged) or `--closed` (won't do / superseded).
+1. **Open an issue**: a heading `* TODO <title> :tag:` with the properties
+   below. One concern per issue. A sub-issue is a child heading of its epic.
+   The ID is a new random 7-character hex string; check it is not already in
+   the file.
+2. **Branch** off `main` named after the issue (e.g. `issue/7102348-ssrf-guard`).
+   Move the heading to `INPROG`.
+3. **Review**: read `git diff main...HEAD` in full, then move the heading to
+   `REVIEW`. Self-review counts as review for a solo repo.
+4. **Merge** with `git merge --ff-only`.
+5. **Close**: the commit that finishes the issue records, in its message body,
+   how it was reviewed, how it was merged, the build/lint/test outcome, and a
+   last line `Closes <id>`. Then **delete the heading** from the file: there is
+   no archive, git keeps the record. A won't-do issue is deleted the same way;
+   say why to the user first.
 
-### Triage labels (required on every new issue)
+States: `TODO`, `NEXT`, `INPROG`, `REVIEW`, then `DONE` or `CANCELLED`
+(the `#+todo:` line of the file).
 
-| Label           | Range  | Meaning                                                                      |
-| --------------- | ------ | ---------------------------------------------------------------------------- |
-| `effort:N`      | 1–10   | Brute-force coding cost (1 = minutes, 10 = multi-day grind)                  |
-| `complexity:N`  | 1–10   | Codebase + domain knowledge required (1 = beginner, 10 = expert)             |
-| `confidence:N%` | 0–100% | "Do I know what I'm doing?" (0% = investigation, 100% = done it in my sleep) |
+```org
+* TODO security: block private URLs before 📝 hands a link to Hermes :security:
+:PROPERTIES:
+:ID:           7102348
+:EFFORT_SCORE: 3
+:COMPLEXITY:   5
+:CONFIDENCE:   55%
+:OPENED:       [2026-11-18 Wed]
+:END:
+Body as plain Org text.
+```
 
-### `rad` CLI gotchas (read before filing)
+### Triage properties (required on every new issue)
 
-- **One label per `--labels` flag.** `--labels "a,b,c"` creates a single literal
-  label `a,b,c`; you want `--labels a --labels b --labels c`. Verify with
-  `rad issue list` (correct = space after comma).
-- **Title ≤ 100 characters** or it gets truncated everywhere.
-- **`rad issue list` shows open only** — use `--all` for the full picture.
-  `rad issue show <id>` → `Status` is the only reliable state read.
-- **Close reasons differ:** `--solved` = done/merged; `--closed` = won't do.
-- **Run rad writes one at a time.** COBs merge across peers, but local
-  writes (`open`, `comment`, `state`, `label`) share one `sigrefs.lock`:
-  in parallel, some report `code=Locked` yet are saved anyway, so a blind
-  retry posts duplicates (no comment delete, only `--edit`). Chain writes
-  with `&&`; after a lock error, check `rad issue show <id> --verbose`
-  before retrying. See radicle-ops skill Gotcha #5. Low "Synced with N
-  seed(s)" counts are normal, not failures.
+| Property       | Range  | Meaning                                                                      |
+| -------------- | ------ | ---------------------------------------------------------------------------- |
+| `EFFORT_SCORE` | 1–10   | Brute-force coding cost (1 = minutes, 10 = multi-day grind)                  |
+| `COMPLEXITY`   | 1–10   | Codebase + domain knowledge required (1 = beginner, 10 = expert)             |
+| `CONFIDENCE`   | 0–100% | "Do I know what I'm doing?" (0% = investigation, 100% = done it in my sleep) |
+
+### Editing the file
+
+- **One writer at a time.** Edit with exact-string edits, never by rewriting the
+  whole file. The user may have it open in Emacs: say when you changed it.
+- **Never commit it** and never copy issue text to GitHub: it is private and
+  holds security findings.
+- Keep body lines out of column 0 when they start with `*` (a heading) or `#+`
+  (a keyword).
 
 ---
 
@@ -172,9 +185,8 @@ regenerated `METRICS.md` together, with a post-commit
 `tools/review/scope-adherence.sh <task_id> --commit <sha>` run to verify the
 self-attested metrics match the tool-computed state.
 
-This commit convention composes with the Radicle workflow above: the commit
-lands on the issue's branch, the lifecycle comment references its SHA, and the
-patch carries the diff.
+This commit convention composes with the issue workflow above: the commit lands
+on the issue's branch and its message carries the lifecycle record.
 
 ## Enforcement
 

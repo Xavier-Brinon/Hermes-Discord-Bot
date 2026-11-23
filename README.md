@@ -89,7 +89,7 @@ confirm a reply in French.
   waiting on Hermes, not on CPU, so extra workers would gain nothing anyway. A
   bot that outgrows one process needs Discord sharding, not workers.
 - **One-way street**: the VPS _pulls_ the code (`git pull`); we never push to
-  `/data/workspace`. The canonical source stays Radicle + `origin`.
+  `/data/workspace`. The canonical source is `origin` on GitHub.
 
 ### Rollback
 

@@ -4,8 +4,8 @@
 
 Please report security problems **privately**, through GitHub's
 [private vulnerability reporting](https://github.com/Xavier-Brinon/Hermes-Discord-Bot/security/advisories/new)
-(Security tab, then "Report a vulnerability"). Do not open a public issue,
-on GitHub or on Radicle, for a vulnerability.
+(Security tab, then "Report a vulnerability"). Do not open a public issue for a
+vulnerability.
 
 Useful details: what an attacker can do, the steps or the Discord message that
 triggers it, and the commit you looked at.
@@ -22,6 +22,5 @@ have their own reporting channels.
 
 ## Where the project lives
 
-This GitHub repository is a read-only mirror. The canonical repository, its
-issues and its patches are on Radicle: `rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb`.
-Pull requests opened on GitHub are not reviewed.
+This GitHub repository is the canonical one. Its issue tracker is private, and
+pull requests opened on GitHub are not reviewed.

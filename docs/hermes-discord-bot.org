@@ -4,7 +4,7 @@
 
 The project's perpetual identity statement: /what/ it is for, /who/ it serves,
 and /what success looks like/. Depth lives in the artifacts referenced here
-([[file:../README.md][README.md]], [[file:../AGENTS.md][AGENTS.md]], Radicle issues), not inlined.
+([[file:../README.md][README.md]], [[file:../AGENTS.md][AGENTS.md]], the issues file), not inlined.
 
 * What
 A French-language Discord assistant for a single community server ("Le
@@ -44,7 +44,7 @@ sole user-facing language. Correct here if the audience is broader.
 
 * See also
 - [[file:../README.md][README.md]] :: operational runbook (start/stop/watchdog/troubleshooting).
-- [[file:../AGENTS.md][AGENTS.md]] :: architecture, conventions, Radicle workflow, =@YackShavingSkill=
+- [[file:../AGENTS.md][AGENTS.md]] :: architecture, conventions, issue workflow, =@YackShavingSkill=
   master rules.
 - [[file:GLOSSARY.org][GLOSSARY.org]] :: domain glossary.
-- Radicle issues (=rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb=) :: the tracked backlog.
+- =docs/private/issues.org= (private, gitignored) :: the tracked backlog.

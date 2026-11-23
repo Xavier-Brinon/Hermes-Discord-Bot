@@ -1,0 +1,41 @@
+#+title: Issues in a private Org file, not Radicle
+#+date: 2026-11-20
+#+status: accepted, amended by emacs-ops ADR 0002
+#+issue: 7a615f2
+#+options: toc:nil num:nil ^:{}
+#+startup: showall indent
+
+The project leaves Radicle. Code lives in plain git, hosted on GitHub. Issues
+live in =docs/private/issues.org=, an Org file that git ignores. Radicle was
+only ever used on one Mac, so its peer-to-peer sync bought nothing, while its
+CLI cost a skill of its own (label and lock gotchas) and kept issues away from
+the editor. Org already provides the parts of a tracker the project uses:
+states, properties for the triage scores, tags, child headings for epics, and
+agenda views.
+
+* Consequences
+- *Private tracker:* the file is never published, so issue text needs no
+  redaction (VPS paths, security findings). It has no history either, and a lost
+  disk loses it: keep it in the machine backup.
+- *Closing deletes the issue.* The commit that finishes an issue carries the
+  lifecycle record (review, merge, test outcome, =Closes <id>=) in its message,
+  so git keeps the record and the file holds only open work. A cancelled issue
+  is deleted too.
+- *Issue IDs* stay random 7-character hex strings, as on Radicle, so old
+  references in commits and docs still read the same.
+- *The 76 closed Radicle issues are not migrated.* They stay readable in the
+  local Radicle storage with ~rad issue show <id> --repo
+  rad:z3RBfCqurRiwaVhYKkSwkUYdgkkgb~ for as long as that storage is kept.
+- *Fresh history:* the repo restarted at f914abb, so commit SHAs quoted in old
+  issues and records point nowhere in this repo.
+- *Review without patches:* review is a self-review of ~git diff main...HEAD~ on
+  the issue branch, then a fast-forward merge. There is no review object
+  anymore; the commit message is the trace.
+- *Tooling:* an =emacs-ops= skill, kept in its own project, will hold the
+  editing workflow. Until then, AGENTS.md §Issue tracking is the binding.
+
+* Amendment
+emacs-ops ADR 0002 (=Emacs-ops/Docs/ADR/0002-one-denote-file-per-ticket.org=)
+replaces the single =issues.org= with one Denote-named file per ticket. Closing
+still deletes the ticket. emacs-ops ADR 0001 adds a public GitHub backlog beside
+the private Org one.
