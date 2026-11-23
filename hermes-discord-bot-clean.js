@@ -18,6 +18,9 @@ const {
   SUMMARY_REACTION,
   DISCORD_MSG_LIMIT,
   TIMEOUT_RECAP,
+  MAX_CONCURRENT_HERMES,
+  USER_RATE_LIMIT_MAX,
+  USER_RATE_LIMIT_WINDOW_MS,
 } = require('./config');
 const {
   buildRecapPrompt,
@@ -45,6 +48,13 @@ const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
 const { askHermes, summarizeLink, probeHermes } = require('./hermes-cli');
 const { checkUrl, findBlockedUrl, filterAllowedUrls } = require('./url-guard');
+const { createLimiter } = require('./rate-limit');
+
+const hermesLimiter = createLimiter({
+  maxConcurrent: MAX_CONCURRENT_HERMES,
+  maxPerUser: USER_RATE_LIMIT_MAX,
+  windowMs: USER_RATE_LIMIT_WINDOW_MS,
+});
 
 // Bound the dedup set so a long-lived process can't leak memory. Discord only fires
 // duplicate messageCreate events back-to-back, so a rolling window of recent ids is
@@ -291,101 +301,115 @@ client.on('messageCreate', async (message) => {
 
       // --- Channel history / recap request ---
       if (!isReplyToBot && HISTORY_PATTERN.test(content) && !isDirectMessage) {
-        console.log('📜 History/recap request detected, fetching channel history...');
-        await message.react('👀');
-
-        // Determine the timeframe — pure date-math lives in recap.js (parseTimeframe).
-        // Month requests set absolute sinceTs/untilTs; relative/numeric set daysBack.
-        const { daysBack, sinceTs, untilTs } = parseTimeframe(content, new Date());
-
-        // Fetch messages for the requested timeframe
-        let history;
-        if (sinceTs && untilTs) {
-          history = await fetchChannelHistory(message.channel, { since: sinceTs, until: untilTs });
-        } else {
-          history = await fetchChannelHistory(message.channel, { daysBack });
-          // If too few messages, extend up to 30 days (only for relative timeframes)
-          if (history.length < 10 && daysBack < 30) {
-            console.log(
-              `📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`
-            );
-            history = await fetchChannelHistory(message.channel, { daysBack: 30 });
-          }
-        }
-        if (history.length > 200) {
-          history = history.slice(-200);
-        }
-        if (history.length === 0) {
-          await message.reply("📭 Je n'ai trouvé aucun message récent dans ce canal.");
-          await finalizeReaction(message, '❌');
-          return;
-        }
-
-        // Send ALL non-bot messages as context (full content, no analytics)
-        const nonBotMessages = history.filter((m) => !m.isBot);
-        // Use the requested timeframe boundaries for the header
-        const firstDate = sinceTs
-          ? new Date(sinceTs).toISOString().split('T')[0]
-          : new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const lastDate = untilTs
-          ? new Date(untilTs).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0];
-
-        let context = `Messages du canal #${message.channel.name} (${firstDate} → ${lastDate}, ${nonBotMessages.length} messages non-bot) :\n\n`;
-        for (const m of nonBotMessages) {
-          context += `[${m.timestamp.split('T')[0]} | ${m.author}] ${m.content}\n`;
-        }
-
-        const recapPrompt = buildRecapPrompt();
-
-        // Ask Hermes for the recap (no web tools needed)
-        const { response: recapResponse } = await askHermes(recapPrompt, {
-          extraContext: context,
-          customTimeout: TIMEOUT_RECAP,
-          flow: 'recap',
+        const recapSlot = hermesLimiter.tryAcquire(message.author.id, {
+          exempt: isAdmin(message.author.id, ADMIN_USER_ID),
         });
-        const rawResponse = formatHermesResponse(recapResponse);
-
-        // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
-        const themes = extractThemes(rawResponse);
-
-        if (themes.length === 0) {
-          await message.reply(
-            "🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue."
+        if (!recapSlot.ok) {
+          await safeReply(
+            message,
+            recapSlot.reason === 'rate' ? messagesFR.rateLimited : messagesFR.busy
           );
-          await finalizeReaction(message, '❌');
           return;
         }
+        try {
+          console.log('📜 History/recap request detected, fetching channel history...');
+          await message.react('👀');
 
-        // Post themes: if already in a thread, post directly; otherwise create one
-        if (message.channel.isThread()) {
-          console.log(`📊 Already in thread ${message.channel.id}, posting themes directly`);
-          await message.channel.send(
-            `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
-          );
-          for (const theme of themes) {
-            await message.channel.send(`**${theme}**`);
+          // Determine the timeframe — pure date-math lives in recap.js (parseTimeframe).
+          // Month requests set absolute sinceTs/untilTs; relative/numeric set daysBack.
+          const { daysBack, sinceTs, untilTs } = parseTimeframe(content, new Date());
+
+          // Fetch messages for the requested timeframe
+          let history;
+          if (sinceTs && untilTs) {
+            history = await fetchChannelHistory(message.channel, {
+              since: sinceTs,
+              until: untilTs,
+            });
+          } else {
+            history = await fetchChannelHistory(message.channel, { daysBack });
+            // If too few messages, extend up to 30 days (only for relative timeframes)
+            if (history.length < 10 && daysBack < 30) {
+              console.log(
+                `📜 Only ${history.length} messages in ${daysBack} days, extending to 30 days...`
+              );
+              history = await fetchChannelHistory(message.channel, { daysBack: 30 });
+            }
           }
-        } else {
-          console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
-          const thread = await message.startThread({
-            name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
-            autoArchiveDuration: 60,
+          if (history.length > 200) {
+            history = history.slice(-200);
+          }
+          if (history.length === 0) {
+            await message.reply("📭 Je n'ai trouvé aucun message récent dans ce canal.");
+            await finalizeReaction(message, '❌');
+            return;
+          }
+
+          // Send ALL non-bot messages as context (full content, no analytics)
+          const nonBotMessages = history.filter((m) => !m.isBot);
+          // Use the requested timeframe boundaries for the header
+          const firstDate = sinceTs
+            ? new Date(sinceTs).toISOString().split('T')[0]
+            : new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const lastDate = untilTs
+            ? new Date(untilTs).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+
+          let context = `Messages du canal #${message.channel.name} (${firstDate} → ${lastDate}, ${nonBotMessages.length} messages non-bot) :\n\n`;
+          for (const m of nonBotMessages) {
+            context += `[${m.timestamp.split('T')[0]} | ${m.author}] ${m.content}\n`;
+          }
+
+          const recapPrompt = buildRecapPrompt();
+
+          // Ask Hermes for the recap (no web tools needed)
+          const { response: recapResponse } = await askHermes(recapPrompt, {
+            extraContext: context,
+            customTimeout: TIMEOUT_RECAP,
+            flow: 'recap',
           });
-          console.log(`📊 Thread created: ${thread.id}`);
-          await thread.send(
-            `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
-          );
-          for (const theme of themes) {
-            await thread.send(`**${theme}**`);
+          const rawResponse = formatHermesResponse(recapResponse);
+
+          // Parse themes: extract THEME: lines (see prompts.js — prompt/parser contract)
+          const themes = extractThemes(rawResponse);
+
+          if (themes.length === 0) {
+            await message.reply(
+              "🤔 Je n'ai pas réussi à identifier les thèmes. Réessaie avec une période plus longue."
+            );
+            await finalizeReaction(message, '❌');
+            return;
           }
+
+          // Post themes: if already in a thread, post directly; otherwise create one
+          if (message.channel.isThread()) {
+            console.log(`📊 Already in thread ${message.channel.id}, posting themes directly`);
+            await message.channel.send(
+              `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
+            );
+            for (const theme of themes) {
+              await message.channel.send(`**${theme}**`);
+            }
+          } else {
+            console.log(`📊 Creating thread: Thèmes — ${firstDate} → ${lastDate}`);
+            const thread = await message.startThread({
+              name: `📊 Thèmes — ${firstDate} → ${lastDate}`,
+              autoArchiveDuration: 60,
+            });
+            console.log(`📊 Thread created: ${thread.id}`);
+            await thread.send(
+              `**Thèmes de #${message.channel.name}** — ${nonBotMessages.length} messages du ${firstDate} au ${lastDate}`
+            );
+            for (const theme of themes) {
+              await thread.send(`**${theme}**`);
+            }
+          }
+          await finalizeReaction(message, '✅');
+        } finally {
+          recapSlot.release();
         }
-        await finalizeReaction(message, '✅');
         return;
       }
-
-      // Add 👀 reaction to signal processing
-      await message.react('👀');
 
       const blockedInPrompt = await findBlockedUrl(content);
       if (blockedInPrompt) {
@@ -397,71 +421,89 @@ client.on('messageCreate', async (message) => {
         return;
       }
 
-      // A reply to a `❓` summary question: tell Hermes which question is being answered. The
-      // summary's own session (recorded on the question message) is resumed below, so it
-      // already holds the article (issue 576af84).
-      const replied = isReplyToBot ? await message.fetchReference().catch(() => null) : null;
-      const question = questionFrom(replied?.content);
-
-      // Inject last summarized link as context for follow-up questions — except for a question
-      // reply, where "the latest link in this channel" may be a different article.
-      let lastLink = getCachedLink(message.channel.id);
-      let extraContext = null;
-      let useWeb = false;
-
-      // If no cached link but question references an article, scan channel history
-      if (!question && !lastLink && /article|lien|post|url|page/i.test(content)) {
-        console.log('🔍 No cached link, scanning channel for recent links...');
-        const scanned = await scanChannelForLinks(message.channel);
-        const recentLinks = [];
-        for (const item of scanned) {
-          if ((await checkUrl(item.url)).allowed) recentLinks.push(item);
-        }
-        if (recentLinks.length > 0) {
-          lastLink = recentLinks[0].url;
-          extraContext = `Liens récents trouvés dans ce canal :\n${recentLinks.map((l) => `- ${l.url} (posté par ${l.author})`).join('\n')}`;
-          useWeb = true;
-          console.log(`📎 Found ${recentLinks.length} recent link(s) in channel`);
-        }
-      } else if (!question && lastLink) {
-        extraContext = `Le dernier article résumé dans ce canal est : ${lastLink}`;
-        useWeb = true;
+      const askSlot = hermesLimiter.tryAcquire(message.author.id, {
+        exempt: isAdmin(message.author.id, ADMIN_USER_ID),
+      });
+      if (!askSlot.ok) {
+        await safeReply(
+          message,
+          askSlot.reason === 'rate' ? messagesFR.rateLimited : messagesFR.busy
+        );
+        return;
       }
 
-      // Summary intent: the user @mentioned the bot with a link in the message. Apply the
-      // shared structured-summary format (buildSummaryFormat) and enable web tools so
-      // Hermes fetches the page. Only a URL in the message triggers this — a plain question
-      // stays normal Q&A, so the format never leaks onto "quel temps fait-il ?". Trade-off:
-      // a pointed question that also carries a URL is treated as a summary (issue ec634229).
-      const wantsSummary = LINK_PATTERN.test(content);
-      if (wantsSummary) useWeb = true;
+      try {
+        // Add 👀 reaction to signal processing
+        await message.react('👀');
 
-      // Resume the conversation this message continues — the replied-to answer's, else the
-      // thread/DM's; a fresh @mention in a channel starts a new one (issue 244bad7).
-      const { response: hermesResponse, sessionId: newSessionId } = await askHermes(
-        question ? buildQuestionReply(question, content) : content,
-        {
-          extraContext,
-          useWebTools: useWeb,
-          sessionId: findSessionId(message),
-          summarize: wantsSummary,
+        // A reply to a `❓` summary question: tell Hermes which question is being answered. The
+        // summary's own session (recorded on the question message) is resumed below, so it
+        // already holds the article (issue 576af84).
+        const replied = isReplyToBot ? await message.fetchReference().catch(() => null) : null;
+        const question = questionFrom(replied?.content);
+
+        // Inject last summarized link as context for follow-up questions — except for a question
+        // reply, where "the latest link in this channel" may be a different article.
+        let lastLink = getCachedLink(message.channel.id);
+        let extraContext = null;
+        let useWeb = false;
+
+        // If no cached link but question references an article, scan channel history
+        if (!question && !lastLink && /article|lien|post|url|page/i.test(content)) {
+          console.log('🔍 No cached link, scanning channel for recent links...');
+          const scanned = await scanChannelForLinks(message.channel);
+          const recentLinks = [];
+          for (const item of scanned) {
+            if ((await checkUrl(item.url)).allowed) recentLinks.push(item);
+          }
+          if (recentLinks.length > 0) {
+            lastLink = recentLinks[0].url;
+            extraContext = `Liens récents trouvés dans ce canal :\n${recentLinks.map((l) => `- ${l.url} (posté par ${l.author})`).join('\n')}`;
+            useWeb = true;
+            console.log(`📎 Found ${recentLinks.length} recent link(s) in channel`);
+          }
+        } else if (!question && lastLink) {
+          extraContext = `Le dernier article résumé dans ce canal est : ${lastLink}`;
+          useWeb = true;
         }
-      );
-      const formattedResponse = formatHermesResponse(hermesResponse);
-      // An @mentioned link gets the same ❓ question split as a 📝 summary (issue 576af84).
-      const split = wantsSummary ? splitQuestions(formattedResponse) : null;
 
-      // Name the thread after the question so multiple threads in a channel stay distinct.
-      const answers = await sendLongResponse(
-        message,
-        split ? split.body : formattedResponse,
-        buildThreadTitle(content)
-      );
+        // Summary intent: the user @mentioned the bot with a link in the message. Apply the
+        // shared structured-summary format (buildSummaryFormat) and enable web tools so
+        // Hermes fetches the page. Only a URL in the message triggers this — a plain question
+        // stays normal Q&A, so the format never leaks onto "quel temps fait-il ?". Trade-off:
+        // a pointed question that also carries a URL is treated as a summary (issue ec634229).
+        const wantsSummary = LINK_PATTERN.test(content);
+        if (wantsSummary) useWeb = true;
 
-      // Key the session on the posted answer(s) so a reply to them continues this chain.
-      if (newSessionId) recordSession(newSessionId, answers);
-      if (split) await postQuestions(answers.at(-1), split.questions, newSessionId);
-      await finalizeReaction(message, '✅');
+        // Resume the conversation this message continues — the replied-to answer's, else the
+        // thread/DM's; a fresh @mention in a channel starts a new one (issue 244bad7).
+        const { response: hermesResponse, sessionId: newSessionId } = await askHermes(
+          question ? buildQuestionReply(question, content) : content,
+          {
+            extraContext,
+            useWebTools: useWeb,
+            sessionId: findSessionId(message),
+            summarize: wantsSummary,
+          }
+        );
+        const formattedResponse = formatHermesResponse(hermesResponse);
+        // An @mentioned link gets the same ❓ question split as a 📝 summary (issue 576af84).
+        const split = wantsSummary ? splitQuestions(formattedResponse) : null;
+
+        // Name the thread after the question so multiple threads in a channel stay distinct.
+        const answers = await sendLongResponse(
+          message,
+          split ? split.body : formattedResponse,
+          buildThreadTitle(content)
+        );
+
+        // Key the session on the posted answer(s) so a reply to them continues this chain.
+        if (newSessionId) recordSession(newSessionId, answers);
+        if (split) await postQuestions(answers.at(-1), split.questions, newSessionId);
+        await finalizeReaction(message, '✅');
+      } finally {
+        askSlot.release();
+      }
     } catch (error) {
       console.error('Error:', error);
 
@@ -646,6 +688,17 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const links = extractLinks(message.content);
     if (links.length === 0) return; // no link → stay silent
 
+    const linkSlot = hermesLimiter.tryAcquire(user.id, {
+      exempt: isAdmin(user.id, ADMIN_USER_ID),
+    });
+    if (!linkSlot.ok) {
+      console.warn(`⏳ Throttled 📝 summary (${linkSlot.reason}) for user ${user.id}`);
+      try {
+        await reaction.users.remove(user.id);
+      } catch {}
+      return;
+    }
+
     SUMMARISING_MESSAGES.add(message.id);
     try {
       if (await summariseLinks(message, links)) {
@@ -663,6 +716,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
       }
     } finally {
       SUMMARISING_MESSAGES.delete(message.id);
+      linkSlot.release();
     }
   } catch (error) {
     console.error('Reaction handler error:', error.message);

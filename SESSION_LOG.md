@@ -1971,3 +1971,47 @@ PASSED. The implementation matches the Pre-Flight commitment: one zero-dependenc
 
 ### Residual risk carried to handover
 - Hermes `-t web` (`web_extract`) follows HTTP redirects and can still choose URLs from prompt instructions; VPS-side Hermes config / container egress enforcement is tracked in follow-up ticket `20261123T211937`.
+
+# Task: rate-limiter
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One pure `createLimiter` factory in `rate-limit.js` (global max 2 concurrent calls, per-user max 3 per 60s, admin exempt from per-user window, idempotent `release()`), configured in `config.js` and wired into `hermes-discord-bot-clean.js` with `try/finally`. I will NOT add a request queue, disk persistence, npm dependencies, or per-channel buckets.
+- **Scope Boundaries:**
+  - In-scope: `rate-limit.js`, `config.js`, `hermes-discord-bot-clean.js`, `test/rate-limit.test.js`, `test/modules.test.js`
+  - Out-of-scope: `hermes-cli.js`, `cache.js`, `package.json`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (small pure module + minimal entrypoint wiring).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` and `examples/anti-patterns/bloated-loop.md`.
+
+### Assumptions
+`.artifacts/rate-limiter/pre_computation_block.md`
+
+### Line-Count Budget
+160 logical lines (source 85, tests 75).
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The implementation matches the Pre-Flight commitment: one zero-dependency `createLimiter` factory in `rate-limit.js` (max 2 concurrent Hermes calls, max 3 requests per 60s per user, admin exempt from per-user window, idempotent `release()`), wired into recap, Q&A, and `📝` summary paths in `hermes-discord-bot-clean.js` with `try/finally`. No queue, persistence, or npm dependency added. Logical LOC landed at 158 vs 160 target (-1%).
+
+### Violation Checklist
+- [ ] **Complexity Creep**: none (158 vs 160).
+- [ ] **Scope Bleed**: none; all changed files declared in `change_boundary.md`.
+- [ ] **Style Drift**: none; matches `url-guard.js` / `child-env.js` pure-module pattern and French Discord replies.
+- [ ] **Issue Lifecycle**: closes `20261123T200855` at merge.
+
+### Verification Results
+`.artifacts/rate-limiter/verification_matrix.md`
+
+6/6 subtasks PASS. 189/189 tests pass (+5 new), eslint 0 errors, prettier clean, frontmatter/precomputation/shakedown linters clean.
+
+### Residual risk carried to handover
+- Rate state is in-memory and resets on PM2 restart, which is acceptable for a 60-second window.

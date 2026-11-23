@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-11-23T21:23:50Z
-source_count: 57
+timestamp: 2026-11-23T21:28:17Z
+source_count: 58
 ---
 
 # Metrics — @YackShavingSkill
@@ -52,6 +52,7 @@ they do not represent current drift. Canonical definition:
 | processed-messages-bound | STANDARD | PASS | 100% |
 | prompt-eval-harness | STANDARD | PASS | 100% |
 | rad-writes-sequential | TRIVIAL | PASS | 100% |
+| rate-limiter | STANDARD | PASS | 100% |
 | reaction-any-link | STANDARD | PASS | 100% |
 | reaction-lifecycle | STANDARD | PASS | 100% |
 | reaction-summaries | STANDARD | PASS | 100% |
@@ -81,8 +82,8 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 57 |
-| PASS rate (Reflex) | 96% |
+| Total tasks | 58 |
+| PASS rate (Reflex) | 97% |
 | Mean Scope Adherence | 97.1% |
 
 ## Violations by type
@@ -152,3 +153,4 @@ they do not represent current drift. Canonical definition:
 | 2026-11-18T22:25:00Z | mirror-hygiene | 100% |
 | 2026-11-18T22:50:00Z | stop-publishing-env | 100% |
 | 2026-11-23T21:23:30Z | url-guard | 100% |
+| 2026-11-23T21:28:00Z | rate-limiter | 100% |

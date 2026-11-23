@@ -25,6 +25,16 @@ test('config — exports constants, paths, patterns, messagesFR', () => {
   assert.ok(c.HISTORY_PATTERN instanceof RegExp);
   assert.equal(typeof c.messagesFR.greeting, 'string');
   assert.equal(typeof c.messagesFR.linkBlocked, 'string');
+  assert.equal(typeof c.messagesFR.busy, 'string');
+  assert.equal(typeof c.messagesFR.rateLimited, 'string');
+  assert.equal(typeof c.MAX_CONCURRENT_HERMES, 'number');
+  assert.equal(typeof c.USER_RATE_LIMIT_MAX, 'number');
+  assert.equal(typeof c.USER_RATE_LIMIT_WINDOW_MS, 'number');
+});
+
+test('rate-limit — exports createLimiter factory', () => {
+  const r = require('../rate-limit');
+  assert.equal(typeof r.createLimiter, 'function');
 });
 
 test('url-guard — exports the URL/IP guard helpers', () => {

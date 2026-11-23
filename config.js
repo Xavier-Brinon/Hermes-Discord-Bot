@@ -83,6 +83,11 @@ const SUMMARY_REACTION = '📝';
 const ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID;
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 
+// Concurrency & per-user rate limits for Hermes invocations (env-overridable).
+const MAX_CONCURRENT_HERMES = Number(process.env.MAX_CONCURRENT_HERMES) || 2;
+const USER_RATE_LIMIT_MAX = Number(process.env.USER_RATE_LIMIT_MAX) || 3;
+const USER_RATE_LIMIT_WINDOW_MS = Number(process.env.USER_RATE_LIMIT_WINDOW_MS) || 60000;
+
 // All Discord-facing bot text is French (see AGENTS.md). {botName} is substituted at use.
 const messagesFR = {
   greeting:
@@ -123,6 +128,11 @@ const messagesFR = {
 
   linkBlocked:
     '🔒 Ce lien pointe vers une adresse privée, locale ou non autorisée. Je ne peux pas le consulter.',
+
+  busy: '⏳ Je traite déjà plusieurs demandes en parallèle. Réessaie dans quelques secondes.',
+
+  rateLimited:
+    '⏳ Trop de demandes en peu de temps. Attends une minute avant de me solliciter à nouveau.',
 };
 
 module.exports = {
@@ -140,6 +150,9 @@ module.exports = {
   TRANSCRIPT_MAX_CHARS,
   MAX_TURNS_LINK,
   MAX_ARGV_PROMPT_BYTES,
+  MAX_CONCURRENT_HERMES,
+  USER_RATE_LIMIT_MAX,
+  USER_RATE_LIMIT_WINDOW_MS,
   DISCORD_MSG_LIMIT,
   LINK_PATTERN,
   HISTORY_PATTERN,
