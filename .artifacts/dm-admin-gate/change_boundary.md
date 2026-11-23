@@ -25,7 +25,7 @@ complexity_tier: COMPLEX
 
 ## Orthogonal Issues (noticed, skipped)
 - `hermes-cli.js` comment "insert -t web after chat" was wrong: the splice put `-t web` before `chat`. Removed with the refactor, no separate issue.
-- SSRF via `web_extract` stays open: issue 7102348.
+- Web-tool URL validation stays tracked separately in the private backlog.
 - Child env passes `DISCORD_BOT_TOKEN` to Hermes: issue 03dee16.
 
 ## Orphan Tracking

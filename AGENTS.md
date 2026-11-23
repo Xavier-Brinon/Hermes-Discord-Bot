@@ -66,7 +66,7 @@ issue → branch → self-review → merge → close
    below. One concern per issue. A sub-issue is a child heading of its epic.
    The ID is a new random 7-character hex string; check it is not already in
    the file.
-2. **Branch** off `main` named after the issue (e.g. `issue/7102348-ssrf-guard`).
+2. **Branch** off `main` named after the issue (e.g. `issue/a1b2c3d-recap-timezone`).
    Move the heading to `INPROG`.
 3. **Review**: read `git diff main...HEAD` in full, then move the heading to
    `REVIEW`. Self-review counts as review for a solo repo.
@@ -81,12 +81,12 @@ States: `TODO`, `NEXT`, `INPROG`, `REVIEW`, then `DONE` or `CANCELLED`
 (the `#+todo:` line of the file).
 
 ```org
-* TODO security: block private URLs before 📝 hands a link to Hermes :security:
+* TODO recap: format dates in Europe/Paris instead of UTC :recap:
 :PROPERTIES:
-:ID:           7102348
-:EFFORT_SCORE: 3
-:COMPLEXITY:   5
-:CONFIDENCE:   55%
+:ID:           a1b2c3d
+:EFFORT_SCORE: 2
+:COMPLEXITY:   2
+:CONFIDENCE:   85%
 :OPENED:       [2026-11-18 Wed]
 :END:
 Body as plain Org text.

@@ -1571,7 +1571,7 @@ PASSED, with one recorded scope addition. The code matches the commitment: `isAd
 5 PASS, 4 PENDING (two live DM checks, VPS toolset audit, lifecycle). Suite 157/157 (+5).
 
 ### Residual risk carried to handover
-- `-t web` keeps `web_extract`, so a guild member can still ask the agent to fetch an arbitrary URL: SSRF, issue 7102348.
+- Web-tool URL validation stays tracked separately in the private backlog.
 - The Hermes child still inherits `DISCORD_BOT_TOKEN`: issue 03dee16.
 - Toolset resolution was read in Hermes 0.21.5 source; prod is 0.22. The `-t` pin makes the default irrelevant, but the VPS audit should still be recorded.
 
@@ -1676,7 +1676,7 @@ PASSED. Source matches the Pre-Flight exactly: one 8-line helper and its applica
 ### Residual risk carried to handover
 - Relies on Hermes's reference syntax; a future Hermes version with a new trigger character would bypass it. The tests pin the current patterns.
 - The dotenvx key is already compromised: rotation in e39e496.
-- `-t web` tools can still fetch arbitrary URLs on request: issue 7102348.
+- Web-tool URL validation stays tracked separately in the private backlog.
 
 # Task: in-process-decrypt
 complexity_score: 6

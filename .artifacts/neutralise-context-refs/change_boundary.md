@@ -19,7 +19,7 @@ complexity_tier: STANDARD
 
 ## Orthogonal Issues (noticed, skipped)
 - Hermes deny-list misses `.env.keys`: upstream report worth filing.
-- `@url:` SSRF also reachable through `-t web` tools: issue 7102348.
+- Web-tool URL validation stays tracked separately in the private backlog.
 
 ## Orphan Tracking
 - None.
