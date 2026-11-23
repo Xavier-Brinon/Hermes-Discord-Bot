@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-11-18T22:47:16Z
-source_count: 56
+timestamp: 2026-11-23T21:23:50Z
+source_count: 57
 ---
 
 # Metrics — @YackShavingSkill
@@ -73,6 +73,7 @@ they do not represent current drift. Canonical definition:
 | test-pure-helpers | COMPLEX | PASS | 100% |
 | timeout-web-aware | STANDARD | PASS | 100% |
 | unique-thread-titles | STANDARD | PASS | 100% |
+| url-guard | COMPLEX | PASS | 100% |
 | veille-adr | TRIVIAL | PASS | 100% |
 | watchdog-restart-reset | STANDARD | PASS | 100% |
 | youtube-transcript | COMPLEX | PASS | 47% |
@@ -80,14 +81,14 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 56 |
+| Total tasks | 57 |
 | PASS rate (Reflex) | 96% |
-| Mean Scope Adherence | 97.0% |
+| Mean Scope Adherence | 97.1% |
 
 ## Violations by type
 | Type | Count across all tasks |
 |------|------------------------|
-| Complexity Creep | 4 |
+| Complexity Creep | 5 |
 | Scope Bleed | 1 |
 | Style Drift | 1 |
 
@@ -150,3 +151,4 @@ they do not represent current drift. Canonical definition:
 | 2026-11-18T19:55:00Z | neutral-hermes-cwd | 100% |
 | 2026-11-18T22:25:00Z | mirror-hygiene | 100% |
 | 2026-11-18T22:50:00Z | stop-publishing-env | 100% |
+| 2026-11-23T21:23:30Z | url-guard | 100% |

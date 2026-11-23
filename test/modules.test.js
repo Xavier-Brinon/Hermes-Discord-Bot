@@ -24,6 +24,20 @@ test('config — exports constants, paths, patterns, messagesFR', () => {
   assert.ok(c.LINK_PATTERN instanceof RegExp);
   assert.ok(c.HISTORY_PATTERN instanceof RegExp);
   assert.equal(typeof c.messagesFR.greeting, 'string');
+  assert.equal(typeof c.messagesFR.linkBlocked, 'string');
+});
+
+test('url-guard — exports the URL/IP guard helpers', () => {
+  const g = require('../url-guard');
+  for (const fn of [
+    'isBlockedIp',
+    'isBlockedHostname',
+    'checkUrl',
+    'findBlockedUrl',
+    'filterAllowedUrls',
+  ]) {
+    assert.equal(typeof g[fn], 'function', `url-guard.${fn} not a function`);
+  }
 });
 
 test('text — exports the text/url helpers including the moved formatHermesResponse/sendLongResponse', () => {

@@ -1924,3 +1924,50 @@ PASSED: the diff is the Simplicity Goal and nothing else: README §Secrets cut i
 - The VPS pull deletes `.env` (or refuses on its local changes): follow the backup-pull-restore procedure posted on 2d31981, restart only after the restore.
 - `ops/rotate-secrets.sh` still names the private key path and backup file names; user decision.
 - The runbook exists only on the Mac until it is copied to its final private home.
+
+# Task: url-guard
+complexity_score: 6
+complexity_tier: COMPLEX
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** One zero-dependency `url-guard.js` using Node's `URL`, `net.isIP`, and injectable `dns.promises.lookup`, wired into `hermes-discord-bot-clean.js` before `askHermes` and `summarizeLink` with `messagesFR.linkBlocked`. I will NOT add an external IP library, an in-process HTTP proxy, configurable CIDR env vars, or a DNS cache.
+- **Scope Boundaries:**
+  - In-scope: `url-guard.js`, `config.js`, `hermes-discord-bot-clean.js`, `test/url-guard.test.js`, `test/modules.test.js`
+  - Out-of-scope: `hermes-cli.js`, `youtube.js`, `jorf.js`, `prompts.js`, `package.json`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (pure guard module + minimal wiring at the two entrypoint call sites, mirroring `child-env.js`).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md` (dedicated module instead of inflating `text.js` or the entrypoint).
+
+### Assumptions
+`.artifacts/url-guard/pre_computation_block.md`
+
+### Line-Count Budget
+195 logical lines (source 100, tests 95).
+
+### COMPLEX-tier confirmation
+User confirmed 2026-11-23: ship the bot-side URL+DNS guard now and track VPS egress/Hermes-config redirect hardening as a follow-up ticket in the same Tracker.
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The implementation matches the Pre-Flight commitment: one zero-dependency `url-guard.js` using Node's `URL`, `net.isIP`, and injectable `dns.promises.lookup`, wired into both `@mention`/DM and `📝` link-summary paths in `hermes-discord-bot-clean.js` with `messagesFR.linkBlocked`. No external library, proxy, DNS cache, or config knob was added. Logical LOC exceeded the 195-line estimate (355 total: 204 source + 151 test) due to full IPv6 expansion and thorough test vectors; recorded as a Simplify Trigger in `.artifacts/url-guard/simplicity_review.md`.
+
+### Violation Checklist
+- [x] **Complexity Creep**: Line-count budget exceeded (+82%), recorded as a Simplify Trigger in `simplicity_review.md` (zero dependencies kept; no over-engineering).
+- [ ] **Scope Bleed**: none; 5 declared files touched.
+- [ ] **Style Drift**: none; matches `child-env.js` pure-module shape and French Discord-facing text convention.
+- [ ] **Issue Lifecycle**: closes `20261123T200854` at merge.
+
+### Verification Results
+`.artifacts/url-guard/verification_matrix.md`
+
+7/7 subtasks PASS. 184/184 tests pass (+8 new), eslint 0 errors, prettier clean, frontmatter lint clean.
+
+### Residual risk carried to handover
+- Hermes `-t web` (`web_extract`) follows HTTP redirects and can still choose URLs from prompt instructions; VPS-side Hermes config / container egress enforcement is tracked in follow-up ticket `20261123T211937`.

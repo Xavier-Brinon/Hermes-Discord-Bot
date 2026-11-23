@@ -120,6 +120,9 @@ const messagesFR = {
   linkUnreadable:
     "🔗 Je n'ai pas pu accéder au contenu réel de ce lien (page non lisible ou vidéo sans " +
     'transcription accessible). Je préfère ne pas inventer de résumé.',
+
+  linkBlocked:
+    '🔒 Ce lien pointe vers une adresse privée, locale ou non autorisée. Je ne peux pas le consulter.',
 };
 
 module.exports = {

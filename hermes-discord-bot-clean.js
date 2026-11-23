@@ -44,6 +44,7 @@ const {
 const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
 const { askHermes, summarizeLink, probeHermes } = require('./hermes-cli');
+const { checkUrl, findBlockedUrl, filterAllowedUrls } = require('./url-guard');
 
 // Bound the dedup set so a long-lived process can't leak memory. Discord only fires
 // duplicate messageCreate events back-to-back, so a rolling window of recent ids is
@@ -386,6 +387,16 @@ client.on('messageCreate', async (message) => {
       // Add 👀 reaction to signal processing
       await message.react('👀');
 
+      const blockedInPrompt = await findBlockedUrl(content);
+      if (blockedInPrompt) {
+        console.warn(
+          `🔒 Blocked URL in prompt (${blockedInPrompt.reason}): ${blockedInPrompt.url}`
+        );
+        await safeReply(message, messagesFR.linkBlocked);
+        await finalizeReaction(message, '⚠️');
+        return;
+      }
+
       // A reply to a `❓` summary question: tell Hermes which question is being answered. The
       // summary's own session (recorded on the question message) is resumed below, so it
       // already holds the article (issue 576af84).
@@ -401,7 +412,11 @@ client.on('messageCreate', async (message) => {
       // If no cached link but question references an article, scan channel history
       if (!question && !lastLink && /article|lien|post|url|page/i.test(content)) {
         console.log('🔍 No cached link, scanning channel for recent links...');
-        const recentLinks = await scanChannelForLinks(message.channel);
+        const scanned = await scanChannelForLinks(message.channel);
+        const recentLinks = [];
+        for (const item of scanned) {
+          if ((await checkUrl(item.url)).allowed) recentLinks.push(item);
+        }
         if (recentLinks.length > 0) {
           lastLink = recentLinks[0].url;
           extraContext = `Liens récents trouvés dans ce canal :\n${recentLinks.map((l) => `- ${l.url} (posté par ${l.author})`).join('\n')}`;
@@ -489,6 +504,17 @@ client.on('messageCreate', async (message) => {
 // already decided there is something to summarise.
 async function summariseLinks(message, links) {
   const context = message.content.replace(LINK_PATTERN, '').trim();
+  const { allowed: allowedLinks, blocked: blockedLinks } = await filterAllowedUrls(
+    links.slice(0, 3)
+  );
+  for (const item of blockedLinks) {
+    console.warn(`🔒 Blocked URL in summary (${item.reason}): ${item.url}`);
+  }
+  if (allowedLinks.length === 0) {
+    await safeReply(message, messagesFR.linkBlocked);
+    await finalizeReaction(message, '⚠️');
+    return true;
+  }
 
   let pendingMsg;
   try {
@@ -499,7 +525,7 @@ async function summariseLinks(message, links) {
 
     // Summarize each link (up to 3). Anchor each on its Discord embed (title/author) so
     // Hermes verifies it read the right content before summarising (issue 1b94451).
-    const linksToProcess = links.slice(0, 3);
+    const linksToProcess = allowedLinks;
     const summaries = [];
     let firstError;
     for (const link of linksToProcess) {
