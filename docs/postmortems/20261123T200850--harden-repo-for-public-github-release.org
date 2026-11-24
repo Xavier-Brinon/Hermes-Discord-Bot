@@ -1,0 +1,85 @@
+#+title: Postmortem: harden repo for public GitHub release
+#+date: [2026-11-24 Tue 14:46]
+#+options: toc:nil num:nil ^:{}
+#+startup: indent
+
+* Goal against outcome
+The goal was to close every security, attack-surface and operational-hygiene
+finding from the pre-public audit before and immediately after publishing =main=
+to a public GitHub repository.
+
+All 10 items in Tracker =20261123T200850= completed:
+
+- Public repository =Xavier-Brinon/Hermes-Discord-Bot= created and pushed on
+  =main= only, with GitHub secret scanning, push protection and private
+  vulnerability reporting enabled, and =gitleaks= pre-push verification clean.
+- Production dependencies cleaned to zero =npm audit --omit=dev= vulnerabilities
+  (down from 14, including 12 high).
+- Three-layer SSRF defence verified end to end: bot-side URL and DNS guard
+  in [[file:../../url-guard.js][url-guard.js]], Hermes =v0.23.3= ~async_is_safe_url~ filtering inside
+  ~web_extract_tool~, and remote cloud extraction (no local HTTP fallback in the
+  active extraction backend), closing redirect and DNS-rebinding reachability to
+  VPS loopback and metadata addresses even in an unprivileged container
+  (=CapEff: 0=).
+- Global concurrency (2) and per-user rate (3 per 60s, admin exempt) limits live
+  across recap, Q&A and link summary flows.
+- VPS checkout repointed to the fresh GitHub history and verified online across
+  a real container recreate.
+
+* What shipped
+- =7ecf85c=: redacted open security notes and replaced the real private issue
+  example in [[file:../../AGENTS.md][AGENTS.md]], [[file:../../SESSION_LOG.md][SESSION_LOG.md]] and workflow artifacts.
+- =353ab82=: removed the startup ~token.substring(0, 10)~ log line
+  in [[file:../../hermes-discord-bot-clean.js][hermes-discord-bot-clean.js]].
+- =eae4de2=: trimmed operational recon and local workstation paths across docs,
+  =SESSION_LOG.md= and workflow artifacts.
+- =33e87ac=: added zero-dependency =url-guard.js= and wired it into mention and
+  reaction link-summary flows with French refusal messages.
+- =a3d43d1=: added zero-dependency [[file:../../rate-limit.js][rate-limit.js]] and wired concurrency and
+  per-user rate limits across all three Hermes entry paths.
+- =01a26f9=: dropped unused =axios= and =dotenv= from [[file:../../package.json][package.json]],
+  rebuilt [[file:../../package-lock.json][package-lock.json]] and cleared all production advisories.
+- =f9f27f4=: fixed the live escape where recap keyword routing intercepted URL
+  mentions ahead of the URL guard, extracted ~isRecapRequest~ in [[file:../../recap.js][recap.js]] and
+  added ordering regression tests.
+- Operational tasks closed: public GitHub repo created and hardened
+  (=20261123T200857=), VPS clone repointed and verified (=20261123T200858=), and
+  VPS Hermes web backend and container capabilities audited (=20261123T211937=).
+
+* Escapes
+One escape was caught during live Discord verification after deploy and recorded
+in [[file:20261124T110355--run-url-guard-before-recap-routing.org][the URL-guard recap routing postmortem]] (=f9f27f4=): a mention starting with
+=résume= followed by a blocked URL matched ~HISTORY_PATTERN~ before reaching
+~findBlockedUrl~. Fixed by running ~findBlockedUrl~ ahead of recap routing and
+excluding URL-bearing messages from ~isRecapRequest~.
+
+* Lessons
+- A redaction task's own verification artifact can re-introduce scrubbed terms
+  if its directory name or grep pattern quotes them verbatim; keep both generic.
+- Container hostnames and platform internals also surface in historical
+  verification tables under =.artifacts/= and =SESSION_LOG.md=, not only in
+  top-level docs.
+- Node's ~URL~ parser canonicalizes IPv4-mapped IPv6 literals like
+  =[::ffff:127.0.0.1]= into hex groups (=[::ffff:7f00:1]=), so IPv6
+  classification must expand all eight 16-bit groups rather than matching
+  dotted-quad strings.
+- Checking the per-user rate window before the global concurrency cap avoids
+  burning a user's quota when a global burst rejects their request, while still
+  enforcing the global cap on exempt admin calls.
+- Dropping unused direct dependencies alongside a clean install and non-breaking
+  =npm audit fix= cleared all 14 production advisories without manual overrides.
+- Unit-testing a security guard module in isolation does not catch entrypoint
+  control-flow ordering bugs; pair security guards with an entrypoint ordering
+  invariant test whenever the entrypoint cannot be imported directly.
+- Inspecting the live Hermes extraction backend on the VPS prevented building
+  unnecessary local proxy machinery: Hermes =v0.23.3= already gates
+  ~web_extract_tool~ with ~async_is_safe_url~ and the active extraction backend
+  fetches remotely outside the VPS container.
+
+* Follow-ups
+- If the VPS Hermes profile is ever switched from its remote extraction backend
+  to a local-fetch backend, verify that backend uses Hermes's
+  ~create_ssrf_safe_client()~ before enabling it in production.
+- Consider enabling GitHub Dependabot security updates on the public repository.
+- Migrate or retire any remaining legacy items in the private =issues.org= file
+  when convenient.
