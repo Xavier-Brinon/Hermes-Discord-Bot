@@ -5,6 +5,12 @@
 # `dotenvx run`: PM2 would capture the decrypted values and `pm2 save` would write them to disk.
 # Usage: ./manage_hermes.sh [start|stop|restart|status|logs|install-hook]
 
+# Prefer the persistent mise-managed Node/npm on /data (including under the gateway:startup
+# boot hook, which runs with the container's minimal PATH).
+if [ -d /data/.local/share/mise/shims ]; then
+    export PATH="/data/.local/share/mise/shims:/data/.local/bin:$PATH"
+fi
+
 case "$1" in
     start)
         cd /data/workspace
