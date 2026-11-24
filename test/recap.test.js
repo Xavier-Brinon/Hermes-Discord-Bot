@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseTimeframe } = require('../recap');
+const { isRecapRequest, parseTimeframe } = require('../recap');
 
 // Fixed reference: 15 June 2026 (month index 5). Build expected timestamps with the
 // same local-time Date constructor the function uses, so no timezone skew.
@@ -91,4 +91,19 @@ test('parseTimeframe — ASCII "fevrier" scopes to February', () => {
 test('parseTimeframe — accented "février" scopes to February (Unicode regex + corrected map)', () => {
   const r = parseTimeframe('le mois de février', NOW);
   assert.deepEqual({ sinceTs: r.sinceTs, untilTs: r.untilTs }, monthSpan(2026, 1));
+});
+
+test('isRecapRequest — matches channel recap prompts without URLs', () => {
+  assert.equal(isRecapRequest('résume la semaine'), true);
+  assert.equal(isRecapRequest('récap des 3 derniers jours'), true);
+  assert.equal(isRecapRequest('summarize last week'), true);
+  assert.equal(isRecapRequest('quel temps fait-il ?'), false);
+});
+
+test('isRecapRequest — excludes URL prompts, bot replies, and DMs', () => {
+  assert.equal(isRecapRequest('résume http://127.0.0.1/'), false);
+  assert.equal(isRecapRequest('résume https://lemonde.fr/article'), false);
+  assert.equal(isRecapRequest('summarize https://example.com'), false);
+  assert.equal(isRecapRequest('résume la semaine', { isReplyToBot: true }), false);
+  assert.equal(isRecapRequest('résume la semaine', { isDirectMessage: true }), false);
 });

@@ -1,7 +1,7 @@
 ---
 artifact_type: metrics_rollup
-timestamp: 2026-11-23T21:31:39Z
-source_count: 59
+timestamp: 2026-11-24T11:06:59Z
+source_count: 60
 ---
 
 # Metrics — @YackShavingSkill
@@ -75,6 +75,7 @@ they do not represent current drift. Canonical definition:
 | test-pure-helpers | COMPLEX | PASS | 100% |
 | timeout-web-aware | STANDARD | PASS | 100% |
 | unique-thread-titles | STANDARD | PASS | 100% |
+| url-guard-recap-order | STANDARD | PASS | 100% |
 | url-guard | COMPLEX | PASS | 100% |
 | veille-adr | TRIVIAL | PASS | 100% |
 | watchdog-restart-reset | STANDARD | PASS | 100% |
@@ -83,7 +84,7 @@ they do not represent current drift. Canonical definition:
 ## Rollup
 | Metric | Value |
 |--------|-------|
-| Total tasks | 59 |
+| Total tasks | 60 |
 | PASS rate (Reflex) | 97% |
 | Mean Scope Adherence | 97.2% |
 
@@ -156,3 +157,4 @@ they do not represent current drift. Canonical definition:
 | 2026-11-23T21:23:30Z | url-guard | 100% |
 | 2026-11-23T21:28:00Z | rate-limiter | 100% |
 | 2026-11-23T21:31:00Z | dep-audit-cleanup | 100% |
+| 2026-11-24T11:06:20Z | url-guard-recap-order | 100% |

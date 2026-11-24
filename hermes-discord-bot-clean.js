@@ -13,7 +13,6 @@ const {
   ALLOWED_GUILD_ID,
   ADMIN_USER_ID,
   messagesFR,
-  HISTORY_PATTERN,
   LINK_PATTERN,
   SUMMARY_REACTION,
   DISCORD_MSG_LIMIT,
@@ -44,7 +43,12 @@ const {
   postInThread,
   isOwnThreadNotice,
 } = require('./text');
-const { parseTimeframe, fetchChannelHistory, scanChannelForLinks } = require('./recap');
+const {
+  isRecapRequest,
+  parseTimeframe,
+  fetchChannelHistory,
+  scanChannelForLinks,
+} = require('./recap');
 const { getCachedLink, setCachedLink, findSessionId, recordSession } = require('./cache');
 const { askHermes, summarizeLink, probeHermes } = require('./hermes-cli');
 const { checkUrl, findBlockedUrl, filterAllowedUrls } = require('./url-guard');
@@ -299,8 +303,18 @@ client.on('messageCreate', async (message) => {
         return;
       }
 
+      const blockedInPrompt = await findBlockedUrl(content);
+      if (blockedInPrompt) {
+        console.warn(
+          `🔒 Blocked URL in prompt (${blockedInPrompt.reason}): ${blockedInPrompt.url}`
+        );
+        await safeReply(message, messagesFR.linkBlocked);
+        await finalizeReaction(message, '⚠️');
+        return;
+      }
+
       // --- Channel history / recap request ---
-      if (!isReplyToBot && HISTORY_PATTERN.test(content) && !isDirectMessage) {
+      if (isRecapRequest(content, { isReplyToBot, isDirectMessage })) {
         const recapSlot = hermesLimiter.tryAcquire(message.author.id, {
           exempt: isAdmin(message.author.id, ADMIN_USER_ID),
         });
@@ -408,16 +422,6 @@ client.on('messageCreate', async (message) => {
         } finally {
           recapSlot.release();
         }
-        return;
-      }
-
-      const blockedInPrompt = await findBlockedUrl(content);
-      if (blockedInPrompt) {
-        console.warn(
-          `🔒 Blocked URL in prompt (${blockedInPrompt.reason}): ${blockedInPrompt.url}`
-        );
-        await safeReply(message, messagesFR.linkBlocked);
-        await finalizeReaction(message, '⚠️');
         return;
       }
 

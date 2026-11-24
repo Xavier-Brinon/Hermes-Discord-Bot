@@ -1,0 +1,43 @@
+#+title: Postmortem: URL guard bypassed by recap routing
+#+date: [2026-11-24 Tue 11:03]
+#+options: toc:nil num:nil ^:{}
+#+startup: indent
+
+* Timeline
+- =33e87ac= (2026-11-23): shipped [[file:../../url-guard.js][url-guard.js]] and wired ~findBlockedUrl~
+  into [[file:../../hermes-discord-bot-clean.js][hermes-discord-bot-clean.js]] on the Q&A branch and ~filterAllowedUrls~ on
+  the reaction summary branch.
+- =1bc8a5d= (2026-11-24): deployed =main= onto the VPS and verified a live
+  Discord mention.
+- 2026-11-24 11:00 UTC: live verification of =@Le Mistral Bot résume
+  http://127.0.0.1/= returned a channel recap instead of the French blocked-URL
+  refusal.
+- =20261124T110355= (2026-11-24): fixed routing precedence and guard order,
+  added regression tests, and recorded this postmortem.
+
+* Root cause
+Two issues interacted inside ~messageCreate~ in =hermes-discord-bot-clean.js=:
+
+1. ~HISTORY_PATTERN~ matched the keyword =résume= even when the message carried
+   a URL, routing =@bot résume <url>= into the channel recap branch instead of
+   the link-summary path.
+2. ~findBlockedUrl(content)~ was placed after the channel recap branch, so any
+   mention matching ~HISTORY_PATTERN~ reached ~askHermes(..., -t web)~ before
+   the URL guard ran.
+
+* Why review missed it
+Unit tests in [[file:../../test/url-guard.test.js][test/url-guard.test.js]] exercised ~url-guard.js~ functions in
+isolation, and =hermes-discord-bot-clean.js= is not imported by unit tests
+because it logs in to Discord on require. Self-review verified the Q&A and
+reaction branches but missed the earlier recap branch inside ~messageCreate~.
+
+* What changes
+- Moved ~findBlockedUrl(content)~ above the recap branch in
+  =hermes-discord-bot-clean.js= so no mention carrying a blocked URL reaches any
+  ~askHermes~ call.
+- Extracted pure ~isRecapRequest~ in [[file:../../recap.js][recap.js]] to return ~false~ whenever
+  ~LINK_PATTERN~ matches, so =résume <url>= routes to link summary rather than
+  channel recap.
+- Added unit tests in [[file:../../test/recap.test.js][test/recap.test.js]] and an entrypoint ordering regression
+  test in =test/url-guard.test.js= asserting ~findBlockedUrl~ precedes both
+  ~isRecapRequest~ and every ~askHermes~ call.

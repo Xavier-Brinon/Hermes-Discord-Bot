@@ -2059,3 +2059,47 @@ PASSED. The change matches the Pre-Flight commitment: removed unused `axios` and
 
 ### Residual risk carried to handover
 - Remember to run `npm install` on the VPS when deploying this commit so production `node_modules` receives the patched transitive versions (`undici`, `ws`, `basic-ftp`, `ip-address`, `js-yaml`, `systeminformation`).
+
+# Task: url-guard-recap-order
+complexity_score: 4
+complexity_tier: STANDARD
+
+## Pre-Flight Entry
+
+### Reflex Check
+- **Simplicity Goal:** Extract a pure `isRecapRequest` helper in `recap.js` excluding URL messages, move `findBlockedUrl(content)` above the recap branch in `hermes-discord-bot-clean.js`, add unit + source-order regression tests, and commit the escape postmortem. I will NOT build a full Discord client mock harness or edit `HISTORY_PATTERN`.
+- **Scope Boundaries:**
+  - In-scope: `recap.js`, `hermes-discord-bot-clean.js`, `test/recap.test.js`, `test/url-guard.test.js`, `test/modules.test.js`, `docs/postmortems/20261124T110355--run-url-guard-before-recap-routing.org`
+  - Out-of-scope: `url-guard.js`, `config.js`, `hermes-cli.js`
+
+### Simplicity Strategy
+MINIMAL
+
+### Contextual Retrieval
+- Gold Standard referenced: `examples/patterns/surgical-diff.md` (pure predicate + minimal reordering + source-order invariant test matching `test/child-env.test.js`).
+- Anti-Pattern avoided: `examples/anti-patterns/god-object.md`.
+
+### Assumptions
+`.artifacts/url-guard-recap-order/pre_computation_block.md`
+
+### Line-Count Budget
+60 logical lines (source 15, tests 45; docs excluded).
+
+## Post-Flight Entry
+
+### Reflex Audit
+PASSED. The fix matches the Pre-Flight commitment: extracted pure `isRecapRequest` in `recap.js` excluding URL messages, moved `findBlockedUrl(content)` above the recap branch in `hermes-discord-bot-clean.js`, removed the orphaned `HISTORY_PATTERN` import, added unit + entrypoint ordering regression tests, and committed the escape postmortem under `docs/postmortems/`. 47 logical LOC vs 60 budget (-22%).
+
+### Violation Checklist
+- [ ] **Complexity Creep**: none (47 vs 60).
+- [ ] **Scope Bleed**: none; all changed files declared in `change_boundary.md`.
+- [ ] **Style Drift**: none.
+- [ ] **Issue Lifecycle**: closes `20261124T110355` at merge.
+
+### Verification Results
+`.artifacts/url-guard-recap-order/verification_matrix.md`
+
+4/4 subtasks PASS. 180/180 non-jorf tests (+3 new, 192 total), eslint 0 errors, prettier clean, escape postmortem `org-review-lint.el` 0 findings.
+
+### Residual risk carried to handover
+- Needs push to `origin/main` + VPS `git pull && ./manage_hermes.sh restart` + live re-test of `@Le Mistral Bot résume http://127.0.0.1/`.

@@ -161,3 +161,18 @@ test('findBlockedUrl and filterAllowedUrls — screen prompts and link lists cle
   assert.deepEqual(filtered.allowed, ['https://lemonde.fr/a']);
   assert.equal(filtered.blocked.length, 2);
 });
+
+test('entrypoint — findBlockedUrl runs before recap routing and before every askHermes call', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'hermes-discord-bot-clean.js'), 'utf8');
+  const guardAt = src.indexOf('findBlockedUrl(content)');
+  const recapAt = src.indexOf('isRecapRequest(content');
+  const firstAskAt = src.indexOf('await askHermes(');
+
+  assert.ok(guardAt !== -1, 'findBlockedUrl(content) missing from entrypoint');
+  assert.ok(recapAt !== -1, 'isRecapRequest(content) missing from entrypoint');
+  assert.ok(firstAskAt !== -1, 'askHermes call missing from entrypoint');
+  assert.ok(guardAt < recapAt, 'findBlockedUrl must run before recap routing');
+  assert.ok(guardAt < firstAskAt, 'findBlockedUrl must run before every askHermes call');
+});

@@ -7,7 +7,17 @@
 
 'use strict';
 
-const { LINK_PATTERN } = require('./config');
+const { LINK_PATTERN, HISTORY_PATTERN } = require('./config');
+
+// True when a message asks for a channel history recap: not a reply to the bot, not a DM,
+// matches HISTORY_PATTERN, and contains no URL (a message with a URL like "résume https://…"
+// asks for a link summary, not a channel recap).
+function isRecapRequest(content, { isReplyToBot = false, isDirectMessage = false } = {}) {
+  if (isReplyToBot || isDirectMessage) return false;
+  const text = String(content || '');
+  if (LINK_PATTERN.test(text)) return false;
+  return HISTORY_PATTERN.test(text);
+}
 
 // French + English month names → 0-based month index. The capture regex below is
 // Unicode-aware (`u` flag + `\p{L}+`) so accented French months (février, décembre,
@@ -199,4 +209,10 @@ async function fetchChannelHistory(channel, opts = {}) {
   }
 }
 
-module.exports = { MONTH_NAMES, parseTimeframe, scanChannelForLinks, fetchChannelHistory };
+module.exports = {
+  MONTH_NAMES,
+  isRecapRequest,
+  parseTimeframe,
+  scanChannelForLinks,
+  fetchChannelHistory,
+};

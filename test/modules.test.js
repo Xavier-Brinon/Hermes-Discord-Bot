@@ -64,9 +64,14 @@ test('text — exports the text/url helpers including the moved formatHermesResp
   }
 });
 
-test('recap — exports parseTimeframe + the moved fetchChannelHistory/scanChannelForLinks', () => {
+test('recap — exports isRecapRequest, parseTimeframe + the moved fetchChannelHistory/scanChannelForLinks', () => {
   const r = require('../recap');
-  for (const fn of ['parseTimeframe', 'fetchChannelHistory', 'scanChannelForLinks']) {
+  for (const fn of [
+    'isRecapRequest',
+    'parseTimeframe',
+    'fetchChannelHistory',
+    'scanChannelForLinks',
+  ]) {
     assert.equal(typeof r[fn], 'function', `recap.${fn} not a function`);
   }
 });
