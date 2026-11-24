@@ -49,64 +49,52 @@ operational runbook.
 
 ## Issue tracking (this project's tracker binding)
 
-Issues live in **`docs/private/issues.org`**, a gitignored Org file. Code is
-plain git, hosted on GitHub. This section is the concrete binding for the
-tracker-neutral issue lifecycle in `docs/waysofworking.org` §Issue tracking and
-lifecycle. Why: `docs/adr/0003-issues-in-a-private-org-file.org`. Issues closed
-before 2026-11-20 stay in the local Radicle archive (`rad issue show <id>`).
+The backlog is **one Org file per ticket** in **`docs/private/tickets/`**,
+gitignored. Code is plain git, hosted on GitHub. The **`emacs-ops`** skill
+operates the tickets; the rules it applies live in the shared ways of working:
+`~/Documents/Projects/Ways-of-working/ways-of-working/backlogs-tickets-and-issues.org`
+(titles, kind tags, Trackers, spikes, postmortems),
+`triage.org` (the three scores) and `branches-commits-and-merging.org` (branch,
+review, merge, `Closes`). Why: `docs/adr/0003-issues-in-a-private-org-file.org`
+and its amendment. Issues closed before 2026-11-20 stay in the local Radicle
+archive (`rad issue show <id>`); a ticket migrated from an issue says
+"Formerly issue =<id>=", so old references in commits still resolve.
 
-**Every change starts as an issue**, even one-liners. The flow is:
+**Every change starts as a ticket**, even one-liners. The flow is:
 
 ```
-issue → branch → self-review → merge → close
+ticket → branch → self-review → merge → close
 ```
 
-1. **Open an issue**: a heading `* TODO <title> :tag:` with the properties
-   below. One concern per issue. A sub-issue is a child heading of its epic.
-   The ID is a new random 7-character hex string; check it is not already in
-   the file.
-2. **Branch** off `main` named after the issue (e.g. `issue/a1b2c3d-recap-timezone`).
-   Move the heading to `INPROG`.
-3. **Review**: read `git diff main...HEAD` in full, then move the heading to
-   `REVIEW`. Self-review counts as review for a solo repo.
-4. **Merge** with `git merge --ff-only`.
-5. **Close**: the commit that finishes the issue records, in its message body,
-   how it was reviewed, how it was merged, the build/lint/test outcome, and a
-   last line `Closes <id>`. Then **delete the heading** from the file: there is
-   no archive, git keeps the record. A won't-do issue is deleted the same way;
+1. **Open**: a file `<identifier>--<slug>__<tags>.org` (Denote naming; the
+   identifier is the creation time, `date +%Y%m%dT%H%M%S`), holding one
+   top-level heading with the triage properties. Copy the header of an existing
+   ticket. A ticket that belongs to a Tracker carries `:TRACKER: <identifier>`
+   and an entry in the Tracker's checklist.
+2. **Start**: branch off `main` named after the slug; set the heading to
+   `INPROG`.
+3. **Review**: set `REVIEW`, read `git diff main...HEAD` in full. Self-review
+   counts as review for a solo repo.
+4. **Close commit**: its body records how the work was reviewed, each
+   acceptance criterion's outcome, the build/lint/test results, a `Learned:`
+   paragraph, and a last line `Closes <identifier>`.
+5. **Merge** with `git merge --ff-only`, delete the branch, then **delete the
+   ticket file** and tick its Tracker entry. There is no archive: git keeps the
+   record. A won't-do ticket is set to `CANCELLED` and deleted the same way;
    say why to the user first.
 
-States: `TODO`, `NEXT`, `INPROG`, `REVIEW`, then `DONE` or `CANCELLED`
-(the `#+todo:` line of the file).
+States: `TODO`, `NEXT`, `INPROG`, `REVIEW`, then `DONE` or `CANCELLED`.
+List the open tickets with `rg -m1 '^[*] ' docs/private/tickets`.
 
-```org
-* TODO recap: format dates in Europe/Paris instead of UTC :recap:
-:PROPERTIES:
-:ID:           a1b2c3d
-:EFFORT_SCORE: 2
-:COMPLEXITY:   2
-:CONFIDENCE:   85%
-:OPENED:       [2026-11-18 Wed]
-:END:
-Body as plain Org text.
-```
+### Editing tickets
 
-### Triage properties (required on every new issue)
-
-| Property       | Range  | Meaning                                                                      |
-| -------------- | ------ | ---------------------------------------------------------------------------- |
-| `EFFORT_SCORE` | 1–10   | Brute-force coding cost (1 = minutes, 10 = multi-day grind)                  |
-| `COMPLEXITY`   | 1–10   | Codebase + domain knowledge required (1 = beginner, 10 = expert)             |
-| `CONFIDENCE`   | 0–100% | "Do I know what I'm doing?" (0% = investigation, 100% = done it in my sleep) |
-
-### Editing the file
-
-- **One writer at a time.** Edit with exact-string edits, never by rewriting the
-  whole file. The user may have it open in Emacs: say when you changed it.
-- **Never commit it** and never copy issue text to GitHub: it is private and
-  holds security findings.
-- Keep body lines out of column 0 when they start with `*` (a heading) or `#+`
-  (a keyword).
+- **One writer at a time.** Change an existing ticket with exact-string edits.
+  The user may have it open in Emacs: name the files you changed.
+- **Never commit a ticket** and never copy its text to GitHub without the
+  user's word-for-word approval (`emacs-ops` §Promoting): tickets are private
+  and hold security findings.
+- Keep body lines out of column 0 when they start with `*` (a heading), and
+  comma-escape any line starting with `#+`.
 
 ---
 

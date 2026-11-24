@@ -47,4 +47,5 @@ sole user-facing language. Correct here if the audience is broader.
 - [[file:../AGENTS.md][AGENTS.md]] :: architecture, conventions, issue workflow, =@YackShavingSkill=
   master rules.
 - [[file:GLOSSARY.org][GLOSSARY.org]] :: domain glossary.
-- =docs/private/issues.org= (private, gitignored) :: the tracked backlog.
+- =docs/private/tickets/= (private, gitignored) :: the backlog, one Org file per
+  ticket.
